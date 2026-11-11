@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>雅思学习卡</title>
+<link rel="stylesheet" href="../shell/card.css">
+<style>
+  .itabs { display: flex; gap: 4px; padding: 8px 10px 0; flex: 0 0 auto; }
+  .itab {
+    appearance: none; border: none; background: var(--surf); color: var(--ink-3);
+    font: 600 11px/1 "Microsoft YaHei", sans-serif; padding: 7px 12px; border-radius: 8px 8px 0 0; cursor: pointer;
+  }
+  .itab.on { background: rgba(244,123,92,.18); color: #ffb9a6; }
+  .ipane { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 16px; }
+  .ipane::-webkit-scrollbar { width: 5px; }
+  .ipane::-webkit-scrollbar-thumb { background: var(--surf-max); border-radius: 3px; }
+
+  /* ---- vocab flashcard ---- */
+  .vwrap { display: flex; flex-direction: column; height: 100%; }
+  .vmeta { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-4); margin-bottom: 8px; }
+  .flash {
+    flex: 1; min-height: 130px; border-radius: 14px; cursor: pointer;
+    background: var(--surf); border: 1px solid var(--surf-hi);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    padding: 16px; text-align: center; transition: transform .18s ease, background .18s ease;
+    user-select: text; -webkit-user-select: text;
+  }
+  .flash:active { transform: scale(.985); }
+  .flash .fw { font-size: 24px; font-weight: 800; letter-spacing: .02em; }
+  .flash .fp { font-size: 11px; color: #f47b5c; }
+  .flash .fm { font-size: 13.5px; color: var(--ink-2); line-height: 1.7; }
+  .flash .fhint { font-size: 10px; color: var(--ink-4); }
+  .vacts { display: flex; gap: 6px; margin-top: 10px; }
+  .vacts button {
+    flex: 1; appearance: none; border: 1px solid var(--surf-hi); border-radius: 8px;
+    background: var(--surf); color: var(--ink-3); font: 600 11px/1 "Microsoft YaHei", sans-serif;
+    padding: 8px 0; cursor: pointer;
+  }
+  .vacts button:hover { background: var(--surf-hi); color: #fff; }
+  .vacts .know { border-color: rgba(158,206,106,.4); color: #b2d98a; }
+  .vacts .dunno { border-color: rgba(224,108,91,.4); color: #e89a8c; }
+
+  /* ---- connectors ---- */
+  .cgroup { margin-bottom: 14px; }
+  .cghead { font-size: 11px; font-weight: 700; color: #f47b5c; letter-spacing: .08em; margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip2 {
+    border: 1px solid var(--surf-hi); background: var(--surf); color: var(--ink-2);
+    font-size: 11px; padding: 4px 9px; border-radius: 7px; cursor: pointer;
+  }
+  .chip2:hover { border-color: rgba(244,123,92,.5); color: #fff; }
+  .chip2 small { color: var(--ink-4); margin-left: 5px; }
+
+  /* ---- speaking / writing ---- */
+  .srow { display: flex; gap: 6px; margin-bottom: 10px; }
+  .srow button {
+    flex: 1; appearance: none; border: 1px solid var(--surf-hi); border-radius: 8px;
+    background: var(--surf); color: var(--ink-3); font: 600 11px/1 "Microsoft YaHei", sans-serif;
+    padding: 8px 0; cursor: pointer;
+  }
+  .srow button.on { border-color: rgba(244,123,92,.55); color: #ffb9a6; background: rgba(244,123,92,.14); }
+  .qcard {
+    background: var(--surf); border: 1px solid var(--surf-hi); border-radius: 12px;
+    padding: 14px; font-size: 12.5px; line-height: 1.8; margin-bottom: 10px;
+    user-select: text; -webkit-user-select: text;
+  }
+  .qcard .tag { font-size: 10px; color: #f47b5c; letter-spacing: .06em; margin-bottom: 6px; }
+  .qlist .qitem {
+    font-size: 11.5px; color: var(--ink-3); line-height: 1.7; padding: 8px 10px;
+    border-left: 2px solid rgba(244,123,92,.35); margin-bottom: 6px; border-radius: 0 8px 8px 0;
+    background: var(--surf); cursor: pointer; user-select: text; -webkit-user-select: text;
+  }
+  .qlist .qitem:hover { background: var(--surf-hi); }
+  .empty { color: var(--ink-4); font-size: 11.5px; text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div id="chrome-slot"></div>
+  <div class="itabs" id="itabs">
+    <button class="itab on" data-t="vocab">背单词</button>
+    <button class="itab" data-t="conn">连接词</button>
+    <button class="itab" data-t="speak">口语</button>
+    <button class="itab" data-t="write">写作</button>
+  </div>
+  <div class="ipane" id="ipane"></div>
+  <div id="rslot"></div>
+</div>
+<script src="../shell/card.js"></script>
+<script src="ielts-data.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = window.IELTS_DATA || { vocab: [], writing: [], speaking: { p1: [], p2: [], p3: [] } };
+  var pane = document.getElementById('ipane');
+  var STORE = 'wb_cardos_ielts_v1';
+  var st = {};
+  try { st = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) {}
+  function persist() { try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) {} }
+
+  var tabs = document.getElementById('itabs');
+  tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('.itab'); if (!b) return;
+    tabs.querySelectorAll('.itab').forEach(function (x) { x.classList.toggle('on', x === b); });
+    render(b.dataset.t);
+  });
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ============ 背单词：翻转卡 ============ */
+  var vOrder = null, vIdx = 0, vFace = false;
+  function shuffled(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function renderVocab() {
+    if (!vOrder) vOrder = shuffled(D.vocab);
+    var w = D.vocab[vIdx];
+    if (!w) { pane.innerHTML = '<div class="empty">词库是空的</div>'; return; }
+    var known = st.known && st.known[w[0]];
+    var parts = String(w[1] || '').split(/\.\s*/, 2);
+    pane.innerHTML =
+      '<div class="vwrap">' +
+      '  <div class="vmeta"><span>' + (vIdx + 1) + ' / ' + D.vocab.length + (known ? ' · 已会' : '') + '</span><span>点卡片翻面 · ←/→ 翻张 · 空格翻面</span></div>' +
+      '  <div class="flash" id="flash">' +
+      (vFace
+        ? '    <div class="fw" style="font-size:17px">' + esc(w[0]) + '</div><div class="fm">' + esc(w[1]) + '</div>'
+        : '    <div class="fw">' + esc(w[0]) + '</div>' + (parts[0] ? '<div class="fp">' + esc(parts[0]) + '.</div>' : '') + '<div class="fhint">点一下看释义</div>') +
+      '  </div>' +
+      '  <div class="vacts">' +
+      '    <button id="vPrev">← 上一张</button>' +
+      '    <button class="dunno" id="vNo">不认识</button>' +
+      '    <button class="know" id="vYes">认识</button>' +
+      '    <button id="vNext">下一张 →</button>' +
+      '  </div>' +
+      '</div>';
+    document.getElementById('flash').addEventListener('click', function () { vFace = !vFace; renderVocab(); });
+    document.getElementById('vPrev').addEventListener('click', function () { step(-1); });
+    document.getElementById('vNext').addEventListener('click', function () { step(1); });
+    document.getElementById('vYes').addEventListener('click', function () { mark(w[0], true); step(1); });
+    document.getElementById('vNo').addEventListener('click', function () { mark(w[0], false); step(1); });
+  }
+  function step(d) {
+    vIdx = (vIdx + d + D.vocab.length) % D.vocab.length;
+    vFace = false; renderVocab();
+  }
+  function mark(word, ok) {
+    st.known = st.known || {};
+    if (ok) st.known[word] = 1; else delete st.known[word];
+    st.count = (st.count || 0) + 1;
+    persist();
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!pane.querySelector('.vwrap')) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+    else if (e.key === ' ') { e.preventDefault(); vFace = !vFace; renderVocab(); }
+  });
+
+  /* ============ 作文连接词 ============ */
+  var CONNECTORS = [
+    ['递进', [
+      ['moreover', '此外，而且'], ['furthermore', '进一步说'], ['in addition', '另外'],
+      ['additionally', '除此以外'], ['what is more', '更重要的是'], ['besides', '除此之外'],
+      ['not to mention', '更不必说'], ['coupled with', '与……一并']]],
+    ['转折', [
+      ['however', '然而'], ['nevertheless', '尽管如此'], ['nonetheless', '不过'],
+      ['on the other hand', '另一方面'], ['by contrast', '相比之下'], ['whereas', '然而（对比）'],
+      ['while', '虽然，尽管'], ['although / though', '虽然'], ['even though', '即使'],
+      ['despite / in spite of', '尽管'], ['admittedly', '诚然']]],
+    ['因果', [
+      ['therefore', '因此'], ['thus', '从而'], ['consequently', '结果'],
+      ['as a result', '因此'], ['accordingly', '相应地'], ['hence', '所以'],
+      ['because of / due to', '因为'], ['owing to', '由于'], ['since / as', '因为']]],
+    ['举例', [
+      ['for example / instance', '例如'], ['such as', '比如'], ['namely', '即'],
+      ['in particular', '尤其'], ['particularly', '特别是'], ['specifically', '具体而言'],
+      ['to illustrate', '举例说明'], ['a case in point is', '一个恰当的例子是']]],
+    ['对比', [
+      ['similarly', '相似地'], ['likewise', '同样地'], ['in the same way', '以同样的方式'],
+      ['equally', '同样'], ['compared with / to', '与……相比'], ['relative to', '相对于']]],
+    ['总结', [
+      ['in conclusion', '总之'], ['to conclude', '总而言之'], ['in summary', '概括来说'],
+      ['to summarise', '归纳一下'], ['overall', '总体而言'], ['all in all', '总的来说'],
+      ['on balance', '权衡来看'], ['taking everything into account', '综合考虑']]],
+    ['立场与程度', [
+      ['arguably', '可以说'], ['it seems that', '看来'], ['it is widely believed that', '人们普遍认为'],
+      ['to some extent', '在某种程度上'], ['to a large extent', '在很大程度上'],
+      ['significantly', '显著地'], ['considerably', '相当大地'], ['marginally', '略微地']]],
+    ['顺序', [
+      ['firstly / to begin with', '首先'], ['secondly', '其次'], ['finally / lastly', '最后'],
+      ['meanwhile', '同时'], ['subsequently', '随后'], ['previously', '此前']]],
+  ];
+  function renderConn() {
+    var h = '<div style="font-size:10.5px;color:var(--ink-4);margin-bottom:10px">点一下复制，写作文时直接贴</div>';
+    CONNECTORS.forEach(function (g) {
+      h += '<div class="cgroup"><div class="cghead">' + g[0] + '</div><div class="chips">' +
+        g[1].map(function (c) {
+          return '<button class="chip2" data-c="' + esc(c[0]) + '">' + esc(c[0]) + '<small>' + esc(c[1]) + '</small></button>';
+        }).join('') + '</div></div>';
+    });
+    pane.innerHTML = h;
+    pane.querySelectorAll('.chip2').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.dataset.c;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t);
+        var old = b.innerHTML; b.innerHTML = '已复制 ✓';
+        setTimeout(function () { b.innerHTML = old; }, 900);
+      });
+    });
+  }
+
+  /* ============ 口语 ============ */
+  var sPart = 'p1';
+  function renderSpeak() {
+    var list = (D.speaking && D.speaking[sPart]) || [];
+    var h =
+      '<div class="srow">' +
+      ['p1', 'p2', 'p3'].map(function (p) {
+        return '<button data-p="' + p + '" class="' + (p === sPart ? 'on' : '') + '">Part ' + p[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="srow"><button id="sRand">🎲 随机抽一题</button></div>' +
+      '<div id="sCard"></div>' +
+      '<div class="qlist" style="margin-top:10px">' +
+      list.map(function (q, i) { return '<div class="qitem" data-i="' + i + '">' + esc(q) + '</div>'; }).join('') +
+      '</div>';
+    pane.innerHTML = h;
+    pane.querySelectorAll('.srow button[data-p]').forEach(function (b) {
+      b.addEventListener('click', function () { sPart = b.dataset.p; renderSpeak(); });
+    });
+    document.getElementById('sRand').addEventListener('click', function () {
+      var q = list[Math.floor(Math.random() * list.length)];
+      document.getElementById('sCard').innerHTML = '<div class="qcard"><div class="tag">RANDOM · Part ' + sPart[1] + '</div>' + esc(q) + '</div>';
+    });
+    pane.querySelectorAll('.qitem').forEach(function (it) {
+      it.addEventListener('click', function () {
+        document.getElementById('sCard').innerHTML = '<div class="qcard"><div class="tag">Part ' + sPart[1] + ' · #' + (Number(it.dataset.i) + 1) + '</div>' + esc(it.textContent) + '</div>';
+      });
+    });
+  }
+
+  /* ============ 写作题库 ============ */
+  var wFilter = 'all';
+  function renderWrite() {
+    var list = (D.writing || []).filter(function (w) { return wFilter === 'all' || w.task === wFilter; });
+    var h =
+      '<div class="srow">' +
+      [['all', '全部'], ['T1', 'Task 1'], ['T2', 'Task 2']].map(function (f) {
+        return '<button data-f="' + f[0] + '" class="' + (f[0] === wFilter ? 'on' : '') + '">' + f[1] + '</button>';
+      }).join('') + '</div>' +
+      list.map(function (w) {
+        return '<div class="qcard"><div class="tag">' + esc(w.task) + ' · ' + esc(w.type || '') + ' · ' + esc(w.src === 'official' ? '官方样题' : '模拟') + '</div>' + esc(w.prompt || '') + '</div>';
+      }).join('');
+    pane.innerHTML = h || '<div class="empty">题库是空的</div>';
+    pane.querySelectorAll('.srow button[data-f]').forEach(function (b) {
+      b.addEventListener('click', function () { wFilter = b.dataset.f; renderWrite(); });
+    });
+  }
+
+  function render(t) {
+    if (t === 'vocab') renderVocab();
+    else if (t === 'conn') renderConn();
+    else if (t === 'speak') renderSpeak();
+    else if (t === 'write') renderWrite();
+  }
+  render('vocab');
+})();
+</script>
+</body>
+</html>

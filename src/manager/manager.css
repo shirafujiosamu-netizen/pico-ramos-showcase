@@ -1,0 +1,147 @@
+/* Pico RamOS manager window styles */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: #14141a; color: #ece9e3;
+  font: 13px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  user-select: none; -webkit-user-select: none;
+}
+#mgr { display: flex; flex-direction: column; height: 100vh; }
+.mhead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: rgba(255,255,255,.04);
+  border-bottom: 1px solid rgba(255,255,255,.08); cursor: move;
+  -webkit-app-region: drag;
+}
+.mtitle { font-weight: 700; font-size: 13.5px; letter-spacing: .04em; }
+.mclose {
+  -webkit-app-region: no-drag; appearance: none; border: none; background: transparent;
+  color: #a8a49b; width: 26px; height: 24px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.mclose:hover { background: rgba(224,108,91,.2); color: #ff9d8a; }
+
+.madd { display: flex; gap: 6px; padding: 12px 14px 4px; flex-wrap: wrap; }
+.madd button, .mfoot button {
+  appearance: none; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+  background: rgba(255,255,255,.05); color: #d8d4cc;
+  font: 600 11.5px/1 "Microsoft YaHei", sans-serif; padding: 8px 12px; cursor: pointer;
+}
+.madd button:hover, .mfoot button:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* global switches block */
+.gglobal {
+  margin: 4px 14px 0; padding: 10px 12px; border-radius: 10px;
+  background: rgba(244,123,92,.07); border: 1px solid rgba(244,123,92,.22);
+}
+.gglobal .grow { display: flex; align-items: center; gap: 10px; font-size: 11.5px; margin: 5px 0; flex-wrap: wrap; }
+.gglobal .grow .glab { flex: 0 0 56px; color: #ffb9a6; font-weight: 700; }
+.gglobal .grow label { display: flex; align-items: center; gap: 5px; color: #d8d4cc; cursor: pointer; }
+.gglobal .grow.muted { color: #6f6b63; font-size: 10.5px; }
+.gglobal input[type="radio"], .gglobal input[type="checkbox"] { accent-color: #f47b5c; }
+
+/* scenes (workspace pages) block - mirrors the right-edge dock */
+.gscenes {
+  margin: 4px 14px 0; padding: 10px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.09);
+}
+.gscenes .grow { display: flex; align-items: center; gap: 10px; font-size: 11.5px; margin-bottom: 8px; flex-wrap: wrap; }
+.gscenes .grow .glab { flex: 0 0 56px; color: #ffb9a6; font-weight: 700; }
+.gscenes .grow .muted { color: #6f6b63; font-size: 10.5px; }
+.gscenes .grow .wizbtn { margin-left: auto; }
+.slist { display: flex; flex-direction: column; gap: 5px; }
+.srow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 8px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+  font-size: 12px;
+}
+.srow .sbadge { flex: 0 0 auto; width: 20px; text-align: center; color: #ffb9a6; font-size: 13px; }
+.srow .sname { font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .scount { color: #6f6b63; font-size: 10.5px; }
+.srow .sactive {
+  font-size: 9.5px; color: #ffb9a6; border: 1px solid rgba(244,123,92,.4);
+  border-radius: 5px; padding: 1px 6px; letter-spacing: .05em;
+}
+.srow button {
+  appearance: none; border: none; background: rgba(255,255,255,.06); color: #b8b4ab;
+  font-size: 10.5px; border-radius: 6px; padding: 4px 8px; cursor: pointer;
+}
+.srow button:hover { background: rgba(255,255,255,.12); color: #fff; }
+.srow button.del:hover { background: rgba(224,108,91,.25); color: #ff9d8a; }
+.srow button:last-of-type { margin-left: auto; }
+
+/* card list grouped by scene */
+.sgroup { margin: 10px 0 4px; }
+.sghead {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; color: #d8d4cc;
+  padding: 4px 2px 6px; letter-spacing: .03em;
+}
+.sghead .sgnum { color: #ffb9a6; font-size: 13px; }
+.sghead .sgcount { color: #6f6b63; font-weight: 400; font-size: 10.5px; }
+.mitem select.mscene {
+  appearance: none; flex: 0 0 auto; max-width: 108px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px; color: #b8b4ab; padding: 4px 6px; font-size: 10.5px; cursor: pointer;
+}
+.mitem select.mscene option { background: #1a1a20; color: #ece9e3; }
+
+.mlist { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.mlist::-webkit-scrollbar { width: 6px; }
+.mlist::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 3px; }
+.mitem {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 10px; margin-bottom: 6px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+}
+.mitem .mdot { width: 12px; height: 12px; border-radius: 4px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.2); }
+.mitem .mbody { flex: 1; min-width: 0; }
+.mitem .mname { font-size: 12.5px; font-weight: 600; }
+.mitem .mtarget { font-size: 10.5px; color: #6f6b63; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mitem .mkind {
+  font-size: 9.5px; color: #f47b5c; border: 1px solid rgba(244,123,92,.4);
+  border-radius: 5px; padding: 1px 6px; flex: 0 0 auto; letter-spacing: .05em;
+}
+.mitem .macts { display: flex; gap: 4px; flex: 0 0 auto; }
+.mitem .macts button {
+  appearance: none; border: none; background: rgba(255,255,255,.06); color: #b8b4ab;
+  font-size: 10.5px; border-radius: 6px; padding: 5px 8px; cursor: pointer;
+}
+.mitem .macts button:hover { background: rgba(255,255,255,.12); color: #fff; }
+.mitem .macts .del:hover { background: rgba(224,108,91,.25); color: #ff9d8a; }
+
+.medit {
+  border-top: 1px solid rgba(255,255,255,.1); padding: 12px 14px;
+  background: rgba(255,255,255,.03);
+}
+.medit.hidden { display: none; }
+.erow { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; }
+.erow label { flex: 0 0 52px; color: #9b978e; }
+.erow input[type="text"], .erow input[type="number"], .erow input:not([type]) {
+  flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px; color: #ece9e3; padding: 6px 9px; font-size: 12px; min-width: 0;
+}
+.erow input[type="range"] { flex: 1; accent-color: #f47b5c; }
+.erow input[type="color"] { width: 40px; height: 24px; border: none; background: none; padding: 0; }
+.wizbtn {
+  appearance: none; border: 1px solid rgba(244,123,92,.4); border-radius: 8px;
+  background: rgba(244,123,92,.12); color: #ffb9a6;
+  font: 600 11px/1 "Microsoft YaHei", sans-serif; padding: 7px 12px; cursor: pointer;
+}
+.wizbtn:hover { background: rgba(244,123,92,.26); color: #fff; }
+.erow select {
+  flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px; color: #ece9e3; padding: 6px 9px; font-size: 12px; min-width: 0;
+}
+.erow select option { background: #1a1a20; }
+.eval { flex: 0 0 40px; text-align: right; color: #d8d4cc; font-variant-numeric: tabular-nums; }
+.erow.btns { justify-content: flex-end; margin-top: 12px; }
+.erow.btns .save { border-color: rgba(244,123,92,.5); color: #ffb9a6; background: rgba(244,123,92,.15); }
+
+.mfoot {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03);
+}
+.mfoot .autostart { margin-left: auto; font-size: 11.5px; color: #b8b4ab; display: flex; align-items: center; gap: 5px; }
+.mfoot .quit { border-color: rgba(224,108,91,.4); color: #e89a8c; }
+.mfoot .quit:hover { background: rgba(224,108,91,.2); }

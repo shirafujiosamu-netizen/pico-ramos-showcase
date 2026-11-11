@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Pico RamOS · 卡片管理</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div id="mgr">
+  <div class="mhead" id="mhead">
+    <span class="mtitle">Pico RamOS · 卡片管理</span>
+    <button class="mclose" id="mClose" title="关闭">✕</button>
+  </div>
+
+  <div class="gglobal" id="gGlobal">
+    <div class="grow"><span class="glab">显示模式</span>
+      <label><input type="radio" name="gmode" value="top"> 卡片置顶（各卡自己说了算）</label>
+      <label><input type="radio" name="gmode" value="desktop"> 桌面组件（全部置底，像手机桌面挂件）</label>
+    </div>
+    <div class="grow"><span class="glab">点击穿透</span>
+      <label><input type="checkbox" id="gCT"> 开启后点击卡片会落到下方窗口（每张卡还能在 ⚙ 里单独覆盖）</label>
+    </div>
+    <div class="grow"><span class="glab">边缘吸附</span>
+      <label><input type="checkbox" id="gSnapCards"> 卡片互相吸附</label>
+      <label><input type="checkbox" id="gSnapScreen"> 对齐屏幕边缘</label>
+    </div>
+    <div class="grow"><span class="glab">系统颜色</span>
+      <label><input type="checkbox" id="gFollow"> 跟随系统深浅色：卡片表面与文字随系统明暗切换（各卡 ⚙ 里的自定义颜色暂时让位）</label>
+      <span class="muted" id="gFollowState" style="font-size:10.5px;color:#6f6b63"></span>
+    </div>
+    <div class="grow">
+      <button id="runWizard" class="wizbtn">重新运行首次设置向导…</button>
+      <span class="muted" style="font-size:10.5px;color:#6f6b63">向导里可选启用哪些卡片、默认透明度/颜色</span>
+    </div>
+    <div class="grow muted">Ctrl+Alt+D：临时拖动模式（穿透开着也能挪卡片）· 开关状态托盘菜单里也能切</div>
+  </div>
+
+  <div class="gscenes" id="gScenes">
+    <div class="grow"><span class="glab">场景</span>
+      <span class="muted">右侧圆圈 = 一页场景 · 滚轮翻页 · 每张卡只属于一个场景</span>
+      <button id="sAdd" class="wizbtn">＋ 新场景</button>
+      <button id="sLayout" class="wizbtn" title="把本页所有卡片按大小重新紧凑排布">重新排布本页</button>
+    </div>
+    <div class="slist" id="sList"></div>
+  </div>
+
+  <div class="madd">
+    <button id="addExe">＋ 导入软件</button>
+    <button id="addUrl">＋ 添加网址</button>
+    <button id="addModule">＋ 学习卡</button>
+    <button id="addPet">＋ 桌宠卡</button>
+    <button id="addBili">＋ B 站卡</button>
+    <button id="addFolder">＋ 桌面文件夹</button>
+  </div>
+
+  <div class="mlist" id="mList"></div>
+
+  <div class="medit hidden" id="mEdit">
+    <div class="erow"><label>名称</label><input id="eTitle"></div>
+    <div class="erow" id="eTargetRow"><label>目标</label><input id="eTarget"><button id="eBrowse" title="浏览">…</button></div>
+    <div class="erow"><label>透明度</label><input type="range" id="eOpacity" min="15" max="100"><span id="eOpVal" class="eval"></span></div>
+    <div class="erow"><label>颜色</label><input type="color" id="eColor"></div>
+    <div class="erow"><label>宽 × 高</label><input type="number" id="eW" min="200" max="1600" step="10"><input type="number" id="eH" min="120" max="1200" step="10"></div>
+    <div class="erow"><label><input type="checkbox" id="eTop"> 置顶</label></div>
+    <div class="erow"><label>穿透</label>
+      <select id="eCT">
+        <option value="null">跟随全局</option>
+        <option value="true">强制穿透</option>
+        <option value="false">强制交互</option>
+      </select>
+    </div>
+    <div class="erow btns">
+      <button class="save" id="eSave">保存</button>
+      <button id="eCancel">取消</button>
+    </div>
+  </div>
+
+  <div class="mfoot">
+    <button id="showAll">显示全部</button>
+    <button id="hideAll">隐藏全部</button>
+    <label class="autostart"><input type="checkbox" id="eAuto"> 开机自启</label>
+    <button class="quit" id="quitBtn">退出</button>
+  </div>
+</div>
+<script src="manager.js"></script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+/* Pico RamOS scene dock - right-edge circle pager (TRJ portfolio glass language).
+   One circle per scene (workspace page); the active scene's circle is enlarged
+   and carries its number. Wheel or click switches pages; + adds a scene.
+   Circles live in fixed-height slots so the active one grows without shifting
+   its neighbours. */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: transparent;
+  font-family: "Poppins", "Montserrat", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+  user-select: none; -webkit-user-select: none;
+}
+#dock {
+  position: relative; height: 100%;
+  display: flex; flex-direction: row;
+  align-items: center; justify-content: center;
+  padding: 0 8px;
+}
+#sdots { display: flex; flex-direction: row; }
+.slot { width: 30px; height: 32px; display: flex; align-items: center; justify-content: center; }
+
+.sdot {
+  appearance: none; padding: 0;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255,255,255,.20) 0%, rgba(255,255,255,.06) 100%);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  border: 1px solid rgba(255,255,255,.22);
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,.92);
+  font: 600 10px/1 "Poppins", "Microsoft YaHei", sans-serif;
+  cursor: pointer;
+  transition: width .45s cubic-bezier(.23,1,.32,1),
+              height .45s cubic-bezier(.23,1,.32,1),
+              border-color .45s cubic-bezier(.23,1,.32,1),
+              box-shadow .45s cubic-bezier(.23,1,.32,1);
+}
+.sdot span { opacity: 0; transition: opacity .3s; pointer-events: none; }
+.sdot:hover { border-color: rgba(255,255,255,.42); }
+.sdot.on {
+  width: 26px; height: 26px;
+  /* the active circle wears the live Windows accent (JS sets --accent) */
+  border: 1.5px solid var(--accent, rgba(255,255,255,.45));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent, #f47b5c) 45%, transparent);
+}
+.sdot.on span { opacity: 1; }
+
+#sadd {
+  appearance: none; padding: 0; margin-left: 12px; flex: 0 0 22px;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.45); background: rgba(255,255,255,.05);
+  color: rgba(255,255,255,.75);
+  font-size: 14px; font-weight: 600; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: border-color .3s, color .3s, transform .3s, background .3s;
+}
+#sadd:hover { border-color: rgba(244,123,92,.85); color: #fff; background: rgba(244,123,92,.22); transform: scale(1.15); }
+
+/* hover label: scene name + card count, floats to the left of the strip */
+/* label floats ABOVE the horizontal strip now, centred on the hovered slot */
+#slabel {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; top: auto; right: auto;
+  padding: 6px 11px; white-space: nowrap;
+  background: linear-gradient(145deg, rgba(255,255,255,.20) 0%, rgba(255,255,255,.06) 100%);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  border: 1px solid rgba(255,255,255,.22); border-radius: 12px;
+  color: rgba(255,255,255,.92); font-size: 11.5px; letter-spacing: .02em;
+  pointer-events: none;
+  opacity: 0; transform: translateX(-50%) translateY(4px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+#slabel.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#slabel .cnt { color: rgba(255,255,255,.5); margin-left: 7px; font-size: 10px; }

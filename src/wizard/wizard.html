@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Pico RamOS · 首次设置</title>
+<link rel="stylesheet" href="wizard.css">
+</head>
+<body>
+<div id="wiz">
+  <div class="whead" id="whead">
+    <span class="wtitle">Pico RamOS · 首次设置</span>
+    <span class="wstep" id="wStep">1 / 3</span>
+  </div>
+
+  <!-- step 1: login consent + global defaults -->
+  <div class="wpane" id="pane1">
+    <div class="wintro">先同意本地数据说明，再设好全局默认值。每张卡片之后还能在自己的 ⚙ 里单独覆盖透明度、颜色和穿透。</div>
+
+    <div class="wconsent" id="wConsent">
+      <label><input type="checkbox" id="wAgree"> 我已了解：邮箱密码、agent key 等仅保存在本机 <code>cards.json</code>，不会上传到任何服务器。</label>
+    </div>
+
+    <div class="wrow"><span class="wlab">默认透明度</span>
+      <input type="range" id="wOpacity" min="15" max="100" value="92">
+      <span class="wval" id="wOpVal">92%</span>
+    </div>
+    <div class="wrow"><span class="wlab">默认颜色</span>
+      <span class="wsw" id="wSwatches"></span>
+      <input type="color" id="wColor" value="#16161c">
+    </div>
+    <div class="wrow"><span class="wlab">系统颜色</span>
+      <label><input type="checkbox" id="wFollow"> 跟随系统深浅色：卡片表面与文字随系统明暗切换（开启时上面「默认颜色」不生效）</label>
+    </div>
+    <div class="wrow"><span class="wlab">显示模式</span>
+      <label><input type="radio" name="wmode" value="top" checked> 卡片置顶</label>
+      <label><input type="radio" name="wmode" value="desktop"> 桌面组件（置底）</label>
+    </div>
+    <div class="wrow"><span class="wlab">边缘吸附</span>
+      <label><input type="checkbox" id="wSnapCards" checked> 卡片互相吸附</label>
+      <label><input type="checkbox" id="wSnapScreen" checked> 对齐屏幕边缘</label>
+    </div>
+    <div class="wrow"><span class="wlab">点击穿透</span>
+      <label><input type="checkbox" id="wCT"> 开启后点击落到下方窗口（桌宠也遵守这个开关，可单独覆盖）</label>
+    </div>
+    <div class="wrow"><span class="wlab">开机自启</span>
+      <label><input type="checkbox" id="wAuto"> 开机自动启动 Pico RamOS</label>
+    </div>
+  </div>
+
+  <!-- step 2: import software + pick cards -->
+  <div class="wpane hidden" id="pane2">
+    <div class="wintro">勾选想启用的卡片，没勾的保持关闭。软件卡可以顺便把路径设好，之后再改也行。</div>
+    <div class="wlist" id="wList"></div>
+    <button class="wadd" id="wAddExe">＋ 导入我的软件（生成软件卡）</button>
+  </div>
+
+  <!-- step 3: mail accounts + agent key -->
+  <div class="wpane hidden" id="pane3">
+    <div class="wintro">在「消息」卡里汇总你的邮箱：添加 Gmail / QQ / 163 账户，多个收件箱并成一个列表，顺序可拖动调整。微信 / QQ 等 IM 消息目前不在本卡支持范围。</div>
+    <div class="wintro" style="margin-top:4px">常见问题：QQ / 163 邮箱需先在网页邮箱的「设置 → 账户」里开启 IMAP 并**获取授权码**（登录密码无效）；Gmail 需使用应用专用密码。</div>
+
+    <div class="wmail">
+      <div class="wm-form">
+        <select id="wMProv">
+          <option value="gmail">Gmail</option>
+          <option value="qq">QQ 邮箱</option>
+          <option value="netease163">163 邮箱</option>
+          <option value="custom">自定义</option>
+        </select>
+        <input id="wMUser" placeholder="邮箱地址（如 you@gmail.com）">
+        <input id="wMPass" type="password" placeholder="授权码 / 应用专用密码">
+      </div>
+      <div class="wm-custom hidden" id="wMCustom">
+        <input id="wMHost" placeholder="IMAP 服务器（自定义）">
+        <input id="wMPort" placeholder="端口" value="993" style="max-width:64px">
+        <label class="wm-secure"><input type="checkbox" id="wMSecure" checked> SSL/TLS</label>
+      </div>
+      <div class="wm-addrow">
+        <span class="wm-tip">Gmail / QQ / 163 需用「应用专用密码 / 授权码」，不是登录密码。</span>
+        <button class="wbtn small" id="wMAdd">添加账户</button>
+      </div>
+      <div class="wmlist" id="wMList"></div>
+    </div>
+
+    <div class="wrow wagent"><span class="wlab">Agent API Key</span>
+      <input id="wAgent" type="password" placeholder="可选，留空也行">
+    </div>
+  </div>
+
+  <div class="wfoot">
+    <button class="wbtn ghost" id="wBack">上一步</button>
+    <span class="whint" id="wHint"></span>
+    <button class="wbtn primary" id="wNext">下一步</button>
+  </div>
+</div>
+<script src="wizard.js"></script>
+</body>
+</html>

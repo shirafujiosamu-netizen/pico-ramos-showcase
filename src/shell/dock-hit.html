@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>dock hit</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%;
+               background: transparent; overflow: hidden; }
+</style>
+</head>
+<body>
+<script>
+/* Invisible, always-on-top click catcher for the glass taskbar.
+   The desktop shell is deliberately pinned at the BOTTOM of the Z order, so
+   any normal window (Unity, Explorer, ...) can cover the dock and steal its
+   clicks. This window sits above them but is fitted to the icon blocks plus
+   the pager strip, so the rest of the desktop still belongs to its apps. It
+   paints nothing: events are forwarded to main and injected into the shell
+   renderer, where the real dock DOM and all its handlers live. No visual
+   change. */
+(function () {
+  'use strict';
+  var lastMove = 0, lastX = -999, lastY = -999;
+  function send(type, e, extra) {
+    if (!window.os || !window.os.dockHit) return;
+    var p = {
+      type: type,
+      x: Number(e.clientX) || 0,
+      y: Number(e.clientY) || 0,
+      button: e.button === 2 ? 'right' : 'left',
+      clickCount: e.detail || 1
+    };
+    if (extra) { for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) p[k] = extra[k]; }
+    window.os.dockHit(p);
+  }
+  /* Hover only needs ~30fps, and a sub-pixel jitter must not wake the whole
+     renderer. This used to be a 16ms IPC + injected mousemove on every single
+     mouse sample, which showed up as input/IME lag. */
+  document.addEventListener('mousemove', function (e) {
+    var t = Date.now();
+    var x = Number(e.clientX) || 0, y = Number(e.clientY) || 0;
+    if (t - lastMove < 33) return;
+    if (Math.abs(x - lastX) < 2 && Math.abs(y - lastY) < 2) return;
+    lastMove = t; lastX = x; lastY = y;
+    send('mouseMove', e);
+  }, { passive: true });
+  /* Right button goes through the dedicated glass-menu channel only. Injecting
+     a synthetic contextMenu does NOT fire a DOM contextmenu in Electron, and
+     injecting a right down/up pair would open the shell's edit-mode handler. */
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 2) send('mouseDown', e);
+  });
+  document.addEventListener('mouseup', function (e) {
+    if (e.button !== 2) send('mouseUp', e);
+  });
+  document.addEventListener('dblclick', function (e) {
+    var twice = { clientX: e.clientX, clientY: e.clientY, button: e.button, detail: 2 };
+    send('mouseDown', twice);
+    send('mouseUp', twice);
+  });
+  document.addEventListener('mouseleave', function (e) { send('mouseLeave', e); });
+  document.addEventListener('wheel', function (e) {
+    send('mouseWheel', e, { deltaX: Number(e.deltaX) || 0, deltaY: Number(e.deltaY) || 0 });
+  }, { passive: true });
+  document.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    if (window.os && window.os.dockContextMenu) {
+      window.os.dockContextMenu({ x: Number(e.clientX) || 0, y: Number(e.clientY) || 0 });
+    }
+  });
+})();
+</script>
+</body>
+</html>

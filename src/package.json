@@ -1,0 +1,15 @@
+{
+  "name": "pico-ramos",
+  "version": "0.2.0",
+  "description": "Pico RamOS - desktop card system: import any app/URL as a floating card, per-card opacity/color/size, edge snapping.",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "33.4.11",
+    "mailparser": "^3.9.0",
+    "node-imap": "^0.9.6"
+  }
+}

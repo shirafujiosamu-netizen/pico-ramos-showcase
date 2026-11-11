@@ -1,0 +1,1617 @@
+/* Pico RamOS — single-window shell.
+   Everything (wallpaper, widgets, dock, sheets) lives in ONE BrowserWindow so
+   backdrop-filter can actually sample the wallpaper. A per-card window can
+   never blur the desktop. */
+
+:root {
+  --page-ease: cubic-bezier(.22, .61, .36, 1);
+  --page-dur: 280ms;
+  --gap: 16px;
+  --pad: 24px;
+  --radius-w: 22px;
+  --radius-t: 18px;
+
+  /* Neutral fallbacks only. Every colour token below is overwritten at boot
+     by applyPalette() from the wallpaper snapshot + the Windows accent, so
+     the whole shell follows the system instead of a fixed theme. */
+  --glass-tint-light: rgba(240, 244, 246, 0.34);
+  --glass-tint-dark: rgba(235, 240, 242, 0.12);
+  /* The shell is a transparent window: backdrop-filter can only sample what
+     this page itself paints, NEVER the live Wallpaper Engine desktop. So each
+     glass needs its own radius AND its own painted fill to read correctly:
+       liquid  - almost no fill, tiny blur    -> see straight through
+       fluted  - mid tint, mid blur           -> reeded pattern stays visible
+       frosted - visible matte haze, big blur -> reads as genuinely fogged
+     Only one third of the surfaces use the large radius, so GPU cost stays low. */
+  --glass-blur: 6px;          /* fluted / sheets / start menu */
+  --blur-liquid: 2px;
+  --blur-frosted: 18px;
+  --glass-sat: 110%;
+
+  /* liquid: a hairline of glass, not a tinted plate */
+  --gl-liquid-fill: rgba(255, 255, 255, .020);
+  --gl-liquid-sheen: rgba(255, 255, 255, .055);
+  --gl-liquid-rim: rgba(255, 255, 255, .34);
+  /* frosted: a real matte haze layer + fine grain. On a transparent window
+     this painted layer, not the blur radius, is what makes it look fogged. */
+  --gl-frost-fill: rgba(238, 245, 248, .30);
+  --gl-frost-grain: rgba(255, 255, 255, .055);
+  --gl-frost-grain-dark: rgba(0, 0, 0, .028);
+
+  /* Theme-aware glass highlights. White sheen over a dark wallpaper reads as
+     a pale plastic sheet, so body.on-dark swaps in a cool, much weaker glint
+     and lets backdrop-filter slightly DARKEN the wallpaper instead. */
+  --gl-sheen-top: rgba(255, 255, 255, .14);
+  --gl-sheen-side: rgba(255, 255, 255, .10);
+  --gl-shade: rgba(20, 40, 45, .06);
+  --gl-rim-top: rgba(255, 255, 255, .45);
+  --gl-rim-side: rgba(255, 255, 255, .18);
+  --gl-crest: rgba(255, 255, 255, .30);
+  --gl-glow: rgba(255, 255, 255, .18);
+  --gl-dock-sheen: rgba(255, 255, 255, .20);
+  --gl-reef: rgba(255, 255, 255, .50);
+  --gl-reef-bow: rgba(255, 255, 255, .16);
+  --gl-frost: rgba(255, 255, 255, .07);
+  --gl-frost-dock: rgba(255, 255, 255, .10);
+  --gl-edge: rgba(240, 244, 246, .34);
+  --gl-bright: brightness(1.02);
+  --gl-blend: screen;
+  --gl-reef-blend: overlay;
+  --glass-edge: inset 0 1px 0 var(--gl-rim-side);
+  --glass-fallback: rgba(232, 238, 240, 0.30);
+
+  --accent: #4a90a4;
+  --accent-soft: rgba(74, 144, 164, .18);
+  --glass-tint-soft: rgba(236, 240, 242, 0.22);
+  --glass-edge-soft: rgba(120, 132, 140, .22);
+
+  --fg: #f0f4f5;
+  --fg-dim: rgba(236, 242, 244, .86);
+  --dock-h: 64px;
+  --bar-h: 34px;
+  /* 1U is published by os.js (innerWidth / 50). The glass dock floats clear
+     of the physical edge, but 0.8U (~27px) instead of a whole native-taskbar
+     strip: enough breathing room, no dead band under the dock. */
+  --u: 34px;
+  --dock-inset: calc(var(--u) * 0.8);
+}
+
+/* follow the OS theme: body.theme-light flips every token, so widgets, dock,
+   sheets and text track Windows' light/dark setting with no JS per-element work */
+body.theme-light {
+  --glass-tint-dark: rgba(240, 244, 246, 0.12);
+  --glass-edge: inset 0 1px 0 var(--gl-rim-side);
+  --glass-fallback: rgba(236, 240, 242, 0.38);
+  --fg: #20292c;
+  --fg-dim: rgba(32, 41, 44, .80);
+}
+
+/* Declared AFTER theme-light on purpose: the wallpaper under the glass, not
+   the OS setting, decides how bright its highlights may be. */
+body.on-dark {
+  --gl-sheen-top: rgba(196, 222, 232, .07);
+  --gl-sheen-side: rgba(196, 222, 232, .04);
+  --gl-shade: rgba(0, 0, 0, .14);
+  --gl-rim-top: rgba(196, 222, 232, .15);
+  --gl-rim-side: rgba(196, 222, 232, .06);
+  --gl-crest: rgba(196, 222, 232, .13);
+  --gl-glow: rgba(196, 222, 232, .06);
+  --gl-dock-sheen: rgba(196, 222, 232, .09);
+  --gl-reef: rgba(196, 222, 232, .22);
+  --gl-reef-bow: rgba(196, 222, 232, .06);
+  --gl-frost: rgba(150, 180, 195, .05);
+  --gl-frost-dock: rgba(150, 180, 195, .06);
+  --gl-edge: rgba(196, 222, 232, .12);
+  --gl-bright: brightness(.92);
+  --gl-blend: soft-light;
+  --gl-reef-blend: soft-light;
+  /* dark wallpaper: cool dark haze, never a pale plastic sheet */
+  --gl-liquid-fill: rgba(196, 222, 232, .014);
+  --gl-liquid-sheen: rgba(196, 222, 232, .030);
+  --gl-liquid-rim: rgba(196, 222, 232, .20);
+  --gl-frost-fill: rgba(122, 152, 168, .26);
+  --gl-frost-grain: rgba(196, 222, 232, .035);
+  --gl-frost-grain-dark: rgba(0, 0, 0, .050);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* transparent: the shell is a transparent BrowserWindow over the real
+     desktop, so nothing here may paint an opaque background */
+  background: transparent;
+  color: var(--fg);
+  font: 14px/1.45 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#os { position: fixed; inset: 0; overflow: hidden; }
+
+/* ---------- layer 0: wallpaper ---------- */
+#wallpaper {
+  position: absolute; inset: 0; z-index: 0;
+  background-size: cover; background-position: center;
+  background-repeat: no-repeat;
+  /* Nothing is painted by default: the transparent window sits above the
+     real desktop layer, so Wallpaper Engine's live scene shows through.
+     Only an explicitly configured custom wallpaper paints here. */
+  background-color: transparent;
+  background-image: none;
+  transition: filter .4s ease;
+}
+#wallpaper video,
+#wallpaper img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* dim only applies when a custom wallpaper is set */
+#wallpaper.has-image::after {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(0, 0, 0, var(--wall-dim, .25));
+  pointer-events: none;
+}
+
+/* ---------- layer 1: pages ---------- */
+#pages {
+  position: absolute;
+  inset: 0 0 var(--pad) 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;             /* horizontal scene paging */
+  overflow: hidden;                 /* stacked pages must not create a scrollbar */
+  /* A permanent will-change pinned a 3x-viewport compositing layer for the
+     whole session. Only the 200ms page flip actually needs it. */
+  will-change: auto;
+}
+#pages.paging { will-change: transform; }
+/* Webviews are the expensive part of a page flip: hide them for the 200ms
+   transform instead of compositing a live B站 feed mid-animation. */
+#pages.paging webview { visibility: hidden; }
+/* Three pages are all in the DOM at once, each with its own backdrop-filter
+   layers. On a transparent full-screen window Chromium keeps compositing the
+   two off-screen pages as well. Skipping their paint keeps layout, DOM and
+   webview state intact, so a page flip only has to drop the class.
+   visibility (not content-visibility) is deliberate: containment creates a
+   new layout context and broke the folder card's height transition. */
+.page.page-off { visibility: hidden; }
+.page {
+  flex: 0 0 100%;
+  min-height: 100%;
+  min-width: 100%;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  position: relative;             /* cards are absolutely placed inside */
+  display: block;
+}
+
+/* ---------- widget ---------- */
+.widget {
+  position: relative;
+  border-radius: var(--radius-w);
+  background: var(--glass-tint-dark);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: var(--glass-edge);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease;
+}
+/* No backdrop-filter (older Chromium / GPU blocklist) — keep it readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .widget, .dock, .sheet, .tile { background: var(--glass-fallback); }
+}
+
+.widget:active { transform: scale(.985); }
+.widget-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 6px;
+  font-size: 12px; letter-spacing: .04em;
+  color: var(--fg-dim);
+}
+.widget-body { flex: 1; min-height: 0; position: relative; }
+.widget-body webview { width: 100%; height: 100%; border: 0; }
+
+/* app tile: 1x1 icon */
+.tile {
+  align-items: center; justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: var(--radius-t);
+}
+.tile .glyph {
+  width: 46%; aspect-ratio: 1; max-width: 64px;
+  border-radius: 30%;
+  display: grid; place-items: center;
+  font-size: 22px;
+  background: linear-gradient(150deg, rgba(255,255,255,.22), rgba(255,255,255,.06));
+  box-shadow: var(--glass-edge);
+  overflow: hidden;
+}
+.tile .glyph img { width: 100%; height: 100%; object-fit: cover; }
+.tile .name {
+  font-size: 12px; color: var(--fg);
+  max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tile.running .glyph { box-shadow: 0 0 0 2px rgba(120, 220, 160, .8), var(--glass-edge); }
+
+/* ---------- layer 2: status bar ---------- */
+#statusbar {
+  position: absolute; top: 0; left: 0; right: 0; height: var(--bar-h);
+  z-index: 4;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px;
+  font-size: 12px; color: var(--fg-dim);
+  pointer-events: none;
+}
+#statusbar .clock { font-variant-numeric: tabular-nums; letter-spacing: .06em; color: var(--fg); }
+
+/* Page dots now sit BELOW the glass taskbar, not above it. The dock floats
+   0.8U above the physical edge, so that strip is exactly where a thin pager
+   belongs. max() keeps the dots on-screen if U gets small on a low-res
+   display. The dock hit window is fitted to include this row, so the pager
+   stays wheel/right-click reachable while the rest of the desktop does not
+   lose a single click. */
+#dots {
+  position: absolute; left: 50%;
+  bottom: max(5px, calc(var(--dock-inset) - 27px));
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(0, 0, 0, .16);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+#dots i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255, 255, 255, .32);
+  cursor: pointer; transition: background .2s, transform .2s;
+}
+#dots i.on { background: rgba(255, 255, 255, .92); transform: scale(1.18); }
+
+/* ---------- layer 3: glass taskbar ----------
+   One separate glass block per item. The strip itself paints nothing at all:
+   no background, no blur, no border, no shadow, and it never swallows the
+   mouse, so the live Wallpaper Engine scene stays visible between blocks. */
+#dock {
+  position: absolute; left: 0; right: 0;
+  /* NOT bottom:0. The shell window now covers the whole display, so a flush
+     dock would sit on the physical edge. Float it 0.8U up, just clear of the
+     edge without leaving a whole taskbar strip of dead space. */
+  bottom: var(--dock-inset); height: var(--dock-h);
+  z-index: 5;
+  display: flex; align-items: flex-end; justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  pointer-events: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.dock-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 62px; height: 62px;
+  border-radius: var(--radius-t);
+  pointer-events: auto;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+  padding: 5px 4px;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 10px; line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .55);
+  background: var(--glass-tint-dark);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border: 1px solid var(--gl-edge);
+  box-shadow: 0 6px 16px rgba(8, 20, 24, .20), var(--glass-edge);
+  transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease, opacity .2s ease;
+}
+.dock-item > * { position: relative; z-index: 1; }
+.dock-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 26px rgba(8, 20, 24, .30), var(--glass-edge);
+}
+.dock-item:active { transform: translateY(-1px) scale(.95); }
+.dock-item .di-icon {
+  width: 26px; height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
+}
+.dock-item .di-glyph {
+  font-size: 19px; font-weight: 650; line-height: 26px;
+  letter-spacing: -.02em;
+}
+.dock-item .di-text {
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  opacity: .92;
+}
+.dock-item .di-dot {
+  position: absolute; bottom: 4px; left: 50%;
+  width: 12px; height: 2px; margin-left: -6px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity .2s ease;
+  z-index: 2;
+}
+.dock-item.is-running .di-dot { opacity: .55; }
+.dock-item.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 8px 22px rgba(8, 20, 24, .28), 0 0 0 1px var(--accent-soft), var(--glass-edge);
+}
+.dock-item.is-active .di-dot { opacity: 1; width: 18px; margin-left: -9px; }
+.dock-item.is-min { opacity: .68; }
+
+/* IME block: same glass family, compact two-line readout.
+   A dot under the label lights up when the IME is open (Chinese mode). */
+.dock-item.dock-ime { width: 62px; gap: 0; }
+.dock-item.dock-ime .di-ime-label {
+  font-size: 19px; font-weight: 650; line-height: 25px;
+  letter-spacing: -.03em;
+}
+.dock-item.dock-ime .di-ime-name {
+  font-size: 9px; opacity: .96; letter-spacing: .02em;
+  /* the liquid block is almost fully transparent: a double halo keeps the
+     small language label legible on both a light and a dark live wallpaper */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .75), 0 0 6px rgba(255, 255, 255, .45);
+}
+body.on-dark .dock-item.dock-ime .di-ime-name {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+}
+.dock-item.dock-ime[data-open='1'] { border-color: var(--accent); }
+.dock-item.dock-ime[data-open='1'] .di-dot { opacity: .9; width: 16px; margin-left: -8px; }
+.dock-item.dock-ime[data-open='0'] .di-ime-label { opacity: .72; }
+.dock-item.dock-ime.is-native-shell { opacity: .55; }
+
+/* clock block: still one of the three glasses, just wider */
+.dock-item.dock-clock { width: 88px; gap: 1px; }
+.dock-item.dock-clock .di-time {
+  font-size: 20px; font-weight: 650;
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.dock-item.dock-clock .di-date { font-size: 10px; opacity: .8; }
+.dock-item.dock-clock.is-native .di-date { color: var(--accent); opacity: 1; }
+
+/* --- the same three glasses as the cards, scaled down for small blocks --- */
+/* 1. liquid: hairline rim + diagonal sheen */
+.dock-item.glass-liquid {
+  background:
+    linear-gradient(150deg, var(--gl-liquid-sheen), rgba(255,255,255,0) 46%),
+    var(--gl-liquid-fill);
+  -webkit-backdrop-filter: blur(var(--blur-liquid)) saturate(116%) var(--gl-bright);
+  backdrop-filter: blur(var(--blur-liquid)) saturate(116%) var(--gl-bright);
+  border-color: var(--gl-liquid-rim);
+  box-shadow: inset 0 1px 0 var(--gl-rim-top), var(--glass-edge);
+}
+.dock-item.glass-liquid::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(150deg, var(--gl-liquid-sheen) 0%, rgba(255,255,255,0) 30%),
+    radial-gradient(120% 70% at 15% 0%, var(--gl-liquid-sheen), transparent 55%);
+  mix-blend-mode: var(--gl-blend);
+}
+/* 2. fluted (长虹玻璃): vertical reeds, crest + groove + cylindrical bow */
+.dock-item.glass-fluted::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,0) 0px,
+    var(--gl-reef) 2px,
+    rgba(255,255,255,.04) 5px,
+    rgba(0,0,0,.20) 9px,
+    rgba(255,255,255,0) 14px
+  );
+  background-size: 14px 100%;
+  mix-blend-mode: var(--gl-reef-blend);
+  filter: blur(.5px);
+  opacity: .9;
+}
+.dock-item.glass-fluted::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, var(--gl-reef-bow), rgba(255,255,255,0) 38%, rgba(0,0,0,.12)),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,.11) 7px, rgba(0,0,0,0) 14px);
+  mix-blend-mode: multiply;
+  opacity: .5;
+}
+/* 3. frosted: even matte, no ribs */
+.dock-item.glass-frosted {
+  background:
+    repeating-linear-gradient(0deg, var(--gl-frost-grain) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, var(--gl-frost-grain-dark) 0 1px, transparent 1px 3px),
+    var(--gl-frost-fill);
+  -webkit-backdrop-filter: blur(var(--blur-frosted)) saturate(85%) contrast(.94) var(--gl-bright);
+  backdrop-filter: blur(var(--blur-frosted)) saturate(85%) contrast(.94) var(--gl-bright);
+}
+.dock-item.glass-frosted::before { display: none; }
+
+/* icon-only blocks (no icon available) fall back to a short glyph */
+.dock-item .di-glyph + .di-text { margin-top: 1px; }
+
+/* overflow list shown in a sheet when more than six windows are open */
+.dock-win-list { display: flex; flex-direction: column; gap: 8px; }
+.dock-win-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--glass-tint-soft);
+  border: 1px solid var(--glass-edge-soft);
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.dock-win-row:hover { background: var(--glass-tint-light); }
+.dock-win-row .di-icon { width: 22px; height: 22px; object-fit: contain; flex: 0 0 auto; }
+.dock-win-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1200px) {
+  #dock { gap: 7px; }
+  .dock-item { width: 54px; height: 54px; }
+  .dock-item .di-icon { width: 22px; height: 22px; }
+  .dock-item .di-glyph { font-size: 17px; line-height: 22px; }
+  .dock-item.dock-clock { width: 78px; }
+  .dock-item.dock-clock .di-time { font-size: 17px; }
+}
+@media (max-width: 900px) {
+  .dock-item { width: 46px; height: 46px; }
+  .dock-item .di-text { display: none; }
+  .dock-item.dock-clock { width: 68px; }
+  .dock-item.dock-clock .di-time { font-size: 15px; }
+}
+
+/* ---------- sheets ---------- */
+.sheet {
+  position: absolute; z-index: 20;
+  border-radius: 26px;
+  background: var(--glass-tint-dark);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: var(--glass-edge);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transition: opacity .22s ease, transform .26s var(--page-ease);
+}
+.sheet[hidden] { display: none; }
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  font-size: 13px; color: var(--fg-dim);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.sheet-body { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; }
+.sheet-close {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 0; cursor: pointer;
+  background: rgba(255, 255, 255, .14); color: var(--fg);
+  font-size: 15px; line-height: 1;
+}
+
+/* ---------- glass context menu ----------
+   Right-click on the dock / pager. Deliberately uses the SAME tokens as
+   .sheet so it inherits the wallpaper-driven glass skin instead of looking
+   like a Windows system menu. display:none while idle: no blur layer is
+   composited until the menu is actually open (perf). */
+.glass-menu {
+  position: absolute; z-index: 40; display: none;
+  min-width: 186px; padding: 6px;
+  border-radius: 16px;
+  color: var(--fg); font-size: 12.5px;
+  background: var(--glass-tint-dark);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: var(--glass-edge), 0 18px 46px rgba(0, 0, 0, .38);
+  pointer-events: auto;
+}
+.glass-menu.open { display: block; }
+.glass-menu-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 8px 11px; border-radius: 10px;
+  cursor: pointer; white-space: nowrap;
+  color: var(--fg); letter-spacing: .01em;
+}
+.glass-menu-item:hover { background: rgba(255, 255, 255, .16); }
+.glass-menu-item.danger { color: #ff9d97; }
+.glass-menu-item .gm-key { font-size: 10.5px; opacity: .55; }
+.glass-menu-sep { height: 1px; margin: 5px 8px; background: rgba(255, 255, 255, .12); }
+
+#drawer {
+  left: 50%; bottom: 0; transform: translate(-50%, 8%);
+  width: min(760px, 72vw); height: 62vh;
+  opacity: 0;
+}
+#drawer.open { opacity: 1; transform: translate(-50%, 0);
+  display: flex !important; }
+#drawer-search {
+  width: 100%; padding: 10px 14px; margin-bottom: 14px;
+  border-radius: 12px; border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .08); color: var(--fg);
+  font-size: 14px; outline: none;
+}
+#drawer-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+}
+#drawer-grid .d-app {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 4px; border-radius: 14px; cursor: pointer;
+}
+#drawer-grid .d-app:hover { background: rgba(255, 255, 255, .08); }
+#drawer-grid .d-app .glyph {
+  width: 52px; height: 52px; border-radius: 16px;
+  display: grid; place-items: center; font-size: 20px;
+  background: linear-gradient(150deg, rgba(255,255,255,.22), rgba(255,255,255,.06));
+  box-shadow: var(--glass-edge); overflow: hidden;
+}
+#drawer-grid .d-app .glyph img { width: 100%; height: 100%; object-fit: cover; }
+#drawer-grid .d-app span { font-size: 11px; text-align: center; word-break: break-all; }
+
+/* Edit mode: a STATIC outline, not an infinite animation. An endless
+   transform animation on every card forced all backdrop-filter layers to
+   re-blur each frame and was the main source of the constant "jelly"
+   wobble + lag. The jelly effect now only lives in the real pointer drag
+   (jellyDrag in os.js). */
+body.editing .widget,
+body.editing .tile {
+  outline: 1px dashed color-mix(in srgb, var(--accent, #7c5cdc) 55%, transparent);
+  outline-offset: -3px;
+  cursor: grab;
+}
+
+/* drop target highlight */
+.grid-hint {
+  position: absolute; z-index: 2;
+  border-radius: var(--radius-w);
+  background: color-mix(in srgb, var(--accent, #7fc9a0) 22%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent, #7fc9a0) 62%, transparent);
+  pointer-events: none;
+  transition: all .1s ease;
+}
+.grid-hint[hidden] { display: none; }
+
+/* ---------- mail composer ---------- */
+.composer { display: flex; flex-direction: column; gap: 10px; height: 100%; padding: 18px 20px; box-sizing: border-box; }
+.composer-bar { display: flex; align-items: center; gap: 10px; }
+.composer-row { display: flex; align-items: center; gap: 12px; }
+.composer-label { width: 46px; flex: 0 0 auto; font-size: 12.5px; color: var(--fg-dim); }
+.composer-from {
+  flex: 0 1 220px; height: 30px; padding: 0 10px; border-radius: 9px;
+  border: 1px solid var(--glass-edge-soft, rgba(255,255,255,.16));
+  background: var(--glass-tint-soft, rgba(255,255,255,.08));
+  color: var(--fg); font: inherit; outline: none;
+}
+.composer-input {
+  flex: 1 1 auto; height: 32px; padding: 0 12px; border-radius: 9px;
+  border: 1px solid var(--glass-edge-soft, rgba(255,255,255,.16));
+  background: var(--glass-tint-soft, rgba(255,255,255,.08));
+  color: var(--fg); font: inherit; outline: none;
+}
+.composer-body {
+  flex: 1 1 auto; min-height: 160px; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--glass-edge-soft, rgba(255,255,255,.16));
+  background: var(--glass-tint-soft, rgba(255,255,255,.08));
+  color: var(--fg); font: inherit; resize: none; outline: none; line-height: 1.6;
+}
+.composer-from:focus, .composer-input:focus, .composer-body:focus {
+  border-color: rgba(47,158,139,.7);
+}
+.composer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.composer-status { font-size: 12.5px; color: var(--fg-dim); }
+.composer-status.ok { color: #5BC97A; }
+.composer-status.bad { color: #FF7A82; }
+.composer-send {
+  height: 32px; padding: 0 22px; border-radius: 9px; border: none; cursor: pointer;
+  background: rgba(47,158,139,.78); color: #fff; font: inherit; font-weight: 600;
+  transition: background .18s, opacity .18s;
+}
+.composer-send:hover { background: rgba(47,158,139,.92); }
+.composer-send:disabled { opacity: .5; cursor: default; }
+body.theme-light .composer-from,
+body.theme-light .composer-input,
+body.theme-light .composer-body { background: rgba(255,255,255,.62); border-color: rgba(0,0,0,.10); }
+
+/* free-placement chrome */
+#pages .widget { position: absolute; margin: 0; }
+.card-resize {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  cursor: nwse-resize; border-bottom-right-radius: 10px;
+  background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.32) 50%);
+  opacity: 0; transition: opacity .16s;
+}
+#pages .widget:hover .card-resize { opacity: 1; }
+
+.opacity-pop {
+  position: fixed; z-index: 9999; display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border-radius: 12px; min-width: 190px;
+  background: rgba(20,20,26,.92); border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 12px 32px rgba(0,0,0,.45); backdrop-filter: blur(18px);
+  color: #fff; font-size: 12.5px;
+}
+.opacity-pop input[type=range] { width: 100%; accent-color: #9d7bff; }
+
+/* ---------- 歌词层：贴边、无边框、在组件之下 ---------- */
+#lyric {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(30vw, 380px);
+  max-height: 74vh;
+  overflow: hidden;
+  z-index: 0;                 /* #pages 是 1，组件永远盖住它 */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .45s ease;
+}
+#lyric.show { opacity: 1; }
+#lyric.right { right: 0; text-align: right; padding-right: 26px; }
+#lyric.left  { left:  0; text-align: left;  padding-left:  26px; }
+#lyric .lly-meta {
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: rgba(255,255,255,.5);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#lyric .lly-meta b { font-weight: 600; color: rgba(255,255,255,.82); }
+#lyric .lly-lines {
+  will-change: transform;
+  transition: transform .55s cubic-bezier(.22,.61,.36,1);
+}
+#lyric .lly-line {
+  font-size: 17px;
+  line-height: 1.85;
+  color: rgba(255,255,255,.20);
+  text-shadow: 0 1px 4px rgba(0,0,0,.6);
+  transition: color .35s ease, transform .35s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#lyric .lly-line.cur {
+  color: rgba(255,255,255,.96);
+  transform: scale(1.06);
+  transform-origin: right center;
+}
+#lyric.left .lly-line.cur { transform-origin: left center; }
+#lyric .lly-bar {
+  margin-top: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.12);
+  overflow: hidden;
+  opacity: .8;
+}
+#lyric .lly-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: rgba(255,255,255,.5);
+  transition: width .3s linear;
+}
+body.theme-light #lyric .lly-line { color: rgba(0,0,0,.18); text-shadow: 0 1px 3px rgba(255,255,255,.5); }
+body.theme-light #lyric .lly-line.cur { color: rgba(0,0,0,.88); }
+body.theme-light #lyric .lly-meta { color: rgba(0,0,0,.45); }
+body.theme-light #lyric .lly-meta b { color: rgba(0,0,0,.78); }
+
+
+/* ---------- start menu: compact glass panel above the Start block ---------- */
+#drawer {
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: 134px;                         /* keep it above the lifted taskbar */
+  left: 18px;
+  width: min(560px, 52vw);
+  height: min(58vh, 520px);
+  padding: 22px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transform: translateY(16px) scale(.97);
+  transform-origin: bottom left;
+  opacity: 0;
+  transition: transform .28s cubic-bezier(.22,.9,.28,1), opacity .22s ease;
+  border: 1px solid var(--gl-edge);
+  border-radius: 22px;
+  background: rgba(22,24,34,.52);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(120%) var(--gl-bright);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(120%) var(--gl-bright);
+  box-shadow: 0 16px 48px rgba(0,0,0,.34), var(--glass-edge);
+  z-index: 60;
+}
+
+#drawer.open {
+  transform: none;
+  opacity: 1;
+}
+
+#drawer[hidden] { display: none; }
+
+#drawerTitle {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: rgba(255,255,255,.94);
+  padding-left: 2px;
+}
+
+#drawerGrid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 14px 10px;
+  align-content: start;
+  padding: 4px 2px 20px;
+  scrollbar-width: thin;
+}
+
+#drawerGrid .d-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 6px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+
+#drawerGrid .d-app:hover {
+  background: rgba(255,255,255,.10);
+  transform: translateY(-1px);
+}
+
+#drawerGrid .d-app span {
+  font-size: 11.5px;
+  line-height: 1.25;
+  text-align: center;
+  color: rgba(255,255,255,.82);
+  max-width: 92px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+#drawerGrid .d-app img,
+#drawerGrid .d-app .icon-fallback {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+body.theme-light #drawer {
+  background: rgba(250,250,252,.60);
+  border-left-color: rgba(0,0,0,.10);
+  box-shadow: -24px 0 60px rgba(0,0,0,.16);
+}
+body.theme-light #drawerTitle { color: rgba(20,22,29,.92); }
+body.theme-light #drawerGrid .d-app span { color: rgba(20,22,29,.72); }
+body.theme-light #drawerGrid .d-app:hover { background: rgba(0,0,0,.06); }
+
+/* ---------------- data cards (clock / pomodoro / sys / weather / schedule) --- */
+.pc-card {
+  display: flex; flex-direction: column;
+  gap: 10px; height: 100%; min-height: 0;
+  padding: 4px 2px 2px;
+  color: var(--fg);
+}
+
+/* clock */
+.pc-clock { align-items: flex-start; justify-content: center; gap: 2px; }
+.pc-clock-line { display: flex; align-items: baseline; gap: 6px; max-width: 100%; }
+.pc-clock-time {
+  font-size: clamp(30px, 4.6vw, 54px); font-weight: var(--pc-display);
+  letter-spacing: .04em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pc-clock-sec {
+  font-size: 13px; color: var(--fg-dim);
+  font-variant-numeric: tabular-nums; letter-spacing: .08em;
+  margin-top: 0; flex: 0 0 auto;
+}
+.pc-clock-date { font-size: 12.5px; color: var(--fg-dim); margin-top: 2px; }
+.pc-clock-tz {
+  font-size: 11px; color: var(--fg-dim); letter-spacing: .05em;
+  margin-top: 3px; opacity: .92; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+
+/* pomodoro */
+.pc-pomo { justify-content: center; align-items: center; text-align: center; gap: 8px; }
+.pc-pomo-phase {
+  font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.pc-pomo-time {
+  font-size: clamp(26px, 3.8vw, 44px); font-weight: var(--pc-display);
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.pc-pomo-bar {
+  width: 78%; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, .14); overflow: hidden;
+}
+.pc-pomo-bar > i {
+  display: block; height: 100%; width: 0%;
+  background: var(--accent, #9d7bff);
+  transition: width .4s linear;
+}
+.pc-pomo.is-break .pc-pomo-bar > i { background: #4ec9a0; }
+.pc-pomo-row { display: flex; gap: 8px; }
+.pc-btn {
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .07);
+  color: var(--fg); border-radius: 10px;
+  font-size: 12px; padding: 5px 14px; cursor: pointer;
+  transition: background .18s;
+}
+.pc-btn:hover { background: rgba(255, 255, 255, .14); }
+.pc-btn-main { background: color-mix(in srgb, var(--accent, #9d7bff) 32%, transparent); border-color: color-mix(in srgb, var(--accent, #9d7bff) 48%, transparent); }
+.pc-pomo-foot { font-size: 11.5px; color: var(--fg-dim); }
+
+/* sys */
+.pc-sys { justify-content: center; gap: 12px; }
+.pc-sys-row { display: flex; justify-content: space-around; align-items: center; }
+.pc-ring { position: relative; display: grid; place-items: center; width: 78px; }
+.pc-ring svg { width: 78px; height: 78px; transform: rotate(0deg); }
+.pc-ring-bg { fill: none; stroke: rgba(255, 255, 255, .10); stroke-width: 6; }
+.pc-ring-fg {
+  fill: none; stroke: var(--accent, #9d7bff); stroke-width: 6;
+  stroke-linecap: round; transition: stroke-dashoffset .45s ease;
+}
+.pc-ring-val {
+  position: absolute; top: 27px; font-size: 15px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.pc-ring-cap {
+  position: absolute; bottom: -4px; font-size: 10.5px; color: var(--fg-dim);
+  letter-spacing: .1em;
+}
+.pc-sys-foot { font-size: 11px; color: var(--fg-dim); text-align: center; }
+
+/* weather */
+.pc-wx { justify-content: center; gap: 3px; }
+.pc-wx-top { display: flex; align-items: baseline; gap: 10px; }
+.pc-wx-icon { font-size: 34px; line-height: 1; }
+.pc-wx-temp { font-size: clamp(26px, 3.4vw, 40px); font-weight: var(--pc-display); line-height: 1; }
+.pc-wx-city { font-size: 13px; }
+.pc-wx-desc { font-size: 12px; color: var(--fg-dim); }
+.pc-wx-meta { font-size: 10.5px; color: var(--fg-dim); opacity: .8; margin-top: 2px; }
+
+
+/* vpn: plain status card, same visual language as sys / clock */
+.pc-vpn { justify-content: flex-start; gap: 7px; }
+.pc-vpn-top { display: flex; align-items: center; gap: 8px; }
+.pc-vpn-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px;
+  background: var(--fg-dim); opacity: .55;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-dim) 12%, transparent);
+}
+.pc-vpn-state {
+  font-size: clamp(20px, 2.4vw, 28px); font-family: var(--font-tall);
+  font-stretch: condensed; font-weight: var(--pc-display); line-height: 1.1;
+}
+.pc-vpn-mode { font-size: 12px; color: var(--fg-dim); margin-top: -4px; }
+.pc-vpn-rows {
+  display: flex; flex-direction: column; gap: 3px;
+  min-height: 0; flex: 1; overflow: hidden;
+}
+.pc-vpn-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; font-size: 11.5px; line-height: 1.35;
+}
+.pc-vpn-key { color: var(--fg-dim); opacity: .85; flex: 0 0 auto; }
+.pc-vpn-val {
+  color: var(--fg); text-align: right; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.pc-vpn-actions { display: flex; gap: 7px; }
+.pc-vpn-actions .pc-btn { flex: 1; padding: 5px 4px; font-size: 11.5px; }
+.pc-vpn-foot {
+  font-size: 10.5px; color: var(--fg-dim); opacity: .8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pc-vpn[data-state='connected'] .pc-vpn-dot {
+  background: #4ec9a0; opacity: 1;
+  box-shadow: 0 0 0 3px rgba(78, 201, 160, .18);
+}
+.pc-vpn[data-state='standby'] .pc-vpn-dot {
+  background: #e8b562; opacity: 1;
+  box-shadow: 0 0 0 3px rgba(232, 181, 98, .18);
+}
+
+/* schedule */
+.pc-sch { gap: 8px; min-height: 0; }
+.pc-sch-head { display: flex; justify-content: space-between; align-items: baseline; }
+.pc-sch-title { font-size: 12.5px; letter-spacing: .06em; }
+.pc-sch-count { font-size: 11px; color: var(--fg-dim); }
+.pc-sch-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 5px;
+  scrollbar-width: thin;
+}
+.pc-sch-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; cursor: pointer; padding: 2px 0;
+}
+.pc-sch-item input { accent-color: var(--accent, #9d7bff); }
+.pc-sch-item.done span { text-decoration: line-through; opacity: .45; }
+.pc-sch-empty { font-size: 12px; color: var(--fg-dim); opacity: .7; padding: 6px 0; }
+.pc-sch-add {
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .05);
+  color: var(--fg); border-radius: 9px;
+  font-size: 12px; padding: 6px 9px; outline: none;
+}
+.pc-sch-add::placeholder { color: var(--fg-dim); opacity: .7; }
+
+/* light theme */
+body.theme-light .pc-pomo-bar { background: rgba(0, 0, 0, .10); }
+body.theme-light .pc-ring-bg { stroke: rgba(0, 0, 0, .10); }
+body.theme-light .pc-btn {
+  border-color: rgba(0, 0, 0, .14); background: rgba(0, 0, 0, .05);
+}
+body.theme-light .pc-btn:hover { background: rgba(0, 0, 0, .10); }
+body.theme-light .pc-btn-main { background: color-mix(in srgb, var(--accent, #7c5cdc) 20%, transparent); border-color: color-mix(in srgb, var(--accent, #7c5cdc) 36%, transparent); }
+body.theme-light .pc-sch-add {
+  border-color: rgba(0, 0, 0, .12); background: rgba(0, 0, 0, .04);
+}
+
+/* Content-only cards: no glass panel, no border, no shadow — the text sits
+   straight on the wallpaper. The card rectangle still exists so the hit-test
+   and drag work, it just paints nothing. */
+.widget-plain,
+.widget-plain:hover {
+  background: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  /* No panel is painted, so there must be NO clipping rectangle: the old
+     overflow:hidden + border-radius cut a bite out of the title glyphs and
+     exposed a visible rounded corner on the bare wallpaper. */
+  overflow: visible !important;
+  border-radius: 0 !important;
+}
+.widget-plain::before,
+.widget-plain::after { display: none !important; }
+/* Content cards sit straight on the LIVE wallpaper (the shell is transparent,
+   Wallpaper Engine shows through). Do NOT hard-code a dark-green text colour
+   here: on a dark wallpaper that was unreadable. Inherit the system-derived
+   --fg / --fg-dim and add a halo so text survives either wallpaper. */
+.widget-plain,
+.widget-plain .widget-head { text-shadow: 0 1px 2px rgba(255, 255, 255, .9); }
+body.on-dark .widget-plain,
+body.on-dark .widget-plain .widget-head { text-shadow: 0 1px 3px rgba(0, 0, 0, .65); }
+.widget-plain .widget-head {
+  opacity: .92 !important;
+  background: none;
+  border: 0;
+  padding: 8px 12px 6px;
+  letter-spacing: .12em;
+}
+
+/* ---------------- typography scale --------------------------------------
+   Three levels only: a big quiet number, a small caps-ish label, and a
+   dim footnote. Everything else is one of those. Numbers use tabular
+   figures and a light weight so they read as data, not as body text. */
+:root {
+  /* 300 was hairline-thin and vanished on a busy wallpaper. 650 is solid
+     without the blur that 700 + condensed used to produce. */
+  --pc-display: 650;
+  --pc-label: 650;
+  --fonts: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+           "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  /* tall & slim face for the data readouts. Latin/digits go to a genuinely
+     condensed face (Arial Narrow is near-universal); Chinese falls through to
+     DengXian/等线 Light which is thinner and taller than YaHei. font-stretch
+     nudges any variable face that exposes a width axis. */
+  --font-tall: "Bahnschrift", "DIN Alternate", "Arial Narrow",
+               "DengXian", "等线 Light",
+               "Microsoft YaHei UI Light", "微软雅黑 Light",
+               "Segoe UI", var(--fonts);
+}
+
+#os, .widget, .widget-head, .widget-body { font-family: var(--fonts); }
+
+/* the number: big, tall/slim, solid, tabular */
+.pc-clock-time,
+.pc-pomo-time,
+.pc-wx-temp,
+.pc-ring-val {
+  font-family: var(--font-tall);
+  font-stretch: condensed;
+  font-weight: var(--pc-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.pc-clock-time { font-size: clamp(34px, 5.0vw, 60px) !important; }
+.pc-pomo-time  { font-size: clamp(30px, 4.2vw, 50px) !important; }
+.pc-wx-temp    { font-size: clamp(30px, 4.0vw, 46px) !important; }
+
+/* the label: readable, not faded out */
+.widget-head {
+  font-size: 12px !important;
+  font-weight: var(--pc-label) !important;
+  letter-spacing: 0.10em !important;
+  text-transform: none;
+  opacity: 0.88;
+}
+
+/* the footnote */
+.pc-clock-date,
+.pc-clock-tz,
+.pc-vpn-mode,
+.pc-vpn-foot,
+.pc-clock-sec,
+.pc-pomo-foot,
+.pc-sys-foot,
+.pc-wx-desc,
+.pc-wx-meta,
+.pc-sch-count,
+.pc-sch-empty,
+.pc-ring-cap {
+  font-size: 12px !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--fg-dim);
+}
+
+/* ring values are part of the "big number" family now */
+.pc-ring-val { font-weight: var(--pc-display); }
+
+/* schedule rows read as body copy, not as labels */
+.pc-sch-item { font-weight: 500; letter-spacing: 0.01em; }
+.pc-sch-title {
+  font-size: 13px !important; font-weight: 650;
+  letter-spacing: 0.06em; opacity: .92;
+}
+
+/* data readouts: light weight, restrained size — the bold/condensed
+   overrides here were too heavy and read as blurry at 700 + condensed */
+
+/* buttons: quiet, not shouty */
+.pc-btn {
+  font-weight: 450;
+  letter-spacing: 0.06em;
+  font-size: 11.5px;
+}
+
+/* ---------- mail: inbox / message / composer ---------- */
+/* ---------- mail privacy: hide the messages, add no colour ----------
+   The translucent glass plate did not actually hide anything: on a fully
+   transparent window backdrop-filter samples the page itself, so senders and
+   subjects stayed legible under a pale tint. Do what the user asked instead -
+   simply do not render the message DOM while idle. The veil is now a purely
+   informative, colourless hint layer (no tint, no blur, no border). */
+.mail { position: relative; height: 100%; }
+.mail-veil {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 9px;
+  text-align: center; padding: 12px;
+  background: none; border: 0; border-radius: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  color: var(--fg-dim);
+  pointer-events: none;
+  opacity: 1; visibility: visible;
+  transition: opacity .22s ease, visibility .22s ease;
+}
+/* the unread count already has its own badge; no duplicate inside the hint */
+.mail-veil-count { display: none; }
+.mail-veil-hint { font-size: 11px; letter-spacing: .08em; opacity: .74; }
+#pages .widget:hover .mail-veil,
+#pages .widget:focus-within .mail-veil,
+#pages .widget.mail-revealed .mail-veil,
+.sheet .mail-veil { opacity: 0; visibility: hidden; }
+/* The privacy rule itself. visibility (not opacity) keeps layout intact, and
+   the inbox is never merely blurred - it is absent until revealed. */
+#pages .widget .mail .mail-tabs,
+#pages .widget .mail .mail-pane { visibility: hidden; }
+#pages .widget:hover .mail .mail-tabs,
+#pages .widget:hover .mail .mail-pane,
+#pages .widget:focus-within .mail .mail-tabs,
+#pages .widget:focus-within .mail .mail-pane,
+#pages .widget.mail-revealed .mail .mail-tabs,
+#pages .widget.mail-revealed .mail .mail-pane,
+.sheet .mail .mail-tabs,
+.sheet .mail .mail-pane { visibility: visible; }
+/* Unread badge stays for the revealed state; the veil hides it by default. */
+.mail-badge {
+  position: absolute; top: 8px; right: 10px; z-index: 4;
+  padding: 2px 9px; border-radius: 999px;
+  font-size: 10px; letter-spacing: .02em; line-height: 1.5;
+  color: var(--fg-dim);
+  background: rgba(255, 255, 255, .10);
+  border: 1px solid rgba(255, 255, 255, .14);
+  pointer-events: none;
+}
+.mail-badge.has-mail {
+  color: #fff; background: rgba(190, 64, 64, .58);
+  border-color: rgba(255, 255, 255, .22);
+}
+
+.mail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.mail-tabs {
+  display: flex; gap: 6px; padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, .10);
+}
+.mail-tab {
+  font: inherit; font-size: 12px; letter-spacing: .04em;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  color: var(--fg-dim); background: transparent;
+  border: 1px solid transparent; transition: background .15s, color .15s;
+}
+.mail-tab:hover { background: rgba(255, 255, 255, .10); }
+.mail-tab.on { color: var(--fg); background: rgba(255, 255, 255, .16); }
+
+.mail-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 6px 12px; }
+.mail-pane::-webkit-scrollbar { width: 6px; }
+.mail-pane::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .18); border-radius: 3px;
+}
+
+.mail-list { display: flex; flex-direction: column; }
+.mail-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  padding: 9px 12px; border-radius: 10px; cursor: pointer;
+  transition: background .15s;
+}
+.mail-row:hover { background: rgba(255, 255, 255, .10); }
+.mail-from { font-size: 12.5px; color: var(--fg); grid-column: 1; }
+.mail-when { font-size: 11px; color: var(--fg-dim); grid-column: 2; grid-row: 1; }
+.mail-subject {
+  font-size: 12.5px; color: var(--fg-dim);
+  grid-column: 1 / span 2; grid-row: 2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mail-empty {
+  padding: 28px 12px; text-align: center;
+  font-size: 12.5px; color: var(--fg-dim);
+}
+
+.mail-one { padding: 4px 12px 16px; }
+.mail-back {
+  font: inherit; font-size: 12px; color: var(--fg-dim);
+  background: none; border: 0; padding: 6px 0; cursor: pointer;
+}
+.mail-back:hover { color: var(--fg); }
+.mail-one-subject {
+  font-size: 15px; font-weight: 500; color: var(--fg); margin: 6px 0 4px;
+}
+.mail-one-meta { font-size: 11.5px; color: var(--fg-dim); margin-bottom: 12px; }
+.mail-one-body {
+  font-size: 13px; line-height: 1.72; color: var(--fg);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+body.theme-light .mail-tab:hover { background: rgba(0, 0, 0, .06); }
+body.theme-light .mail-tab.on { background: rgba(0, 0, 0, .10); }
+body.theme-light .mail-row:hover { background: rgba(0, 0, 0, .05); }
+body.theme-light .mail-pane::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .18); }
+
+/* ---------- bilibili: feed list / detail (reads covers + text, no webview) ---------- */
+.bili { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.bili-head {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 10px 14px 8px; border-bottom: 1px solid rgba(255, 255, 255, .10);
+}
+.bili-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.bili-refresh {
+  font: inherit; font-size: 11px; color: var(--fg-dim);
+  background: rgba(255, 255, 255, .10); border: 0; border-radius: 999px;
+  padding: 4px 10px; cursor: pointer; transition: background .15s, color .15s;
+}
+.bili-refresh:hover { color: var(--fg); background: rgba(255, 255, 255, .18); }
+.bili-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 6px 12px; }
+.bili-pane::-webkit-scrollbar { width: 6px; }
+.bili-pane::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 3px; }
+
+.bili-list { display: flex; flex-direction: column; gap: 6px; }
+.bili-row {
+  display: grid; grid-template-columns: 96px 1fr; gap: 8px;
+  padding: 6px; border-radius: 10px; cursor: pointer; transition: background .15s;
+}
+.bili-row:hover { background: rgba(255, 255, 255, .10); }
+.bili-cover {
+  width: 96px; height: 60px; object-fit: cover; border-radius: 8px;
+  background: rgba(255, 255, 255, .10); display: block;
+}
+.bili-meta { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.bili-name {
+  font-size: 12.5px; color: var(--fg); line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.bili-sub { font-size: 11px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bili-pub { font-size: 10.5px; color: var(--fg-dim); }
+.bili-empty { padding: 28px 12px; text-align: center; font-size: 12.5px; color: var(--fg-dim); }
+
+.bili-one { padding: 4px 12px 16px; }
+.bili-back {
+  font: inherit; font-size: 12px; color: var(--fg-dim);
+  background: none; border: 0; padding: 6px 0; cursor: pointer;
+}
+.bili-back:hover { color: var(--fg); }
+.bili-big { width: 100%; border-radius: 10px; margin: 8px 0; display: block; background: rgba(255, 255, 255, .10); }
+.bili-one-title { font-size: 15px; font-weight: 500; color: var(--fg); margin: 6px 0 4px; line-height: 1.35; }
+.bili-one-meta { font-size: 11.5px; color: var(--fg-dim); margin-bottom: 10px; }
+.bili-one-desc {
+  font-size: 12.5px; line-height: 1.7; color: var(--fg);
+  white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto;
+}
+.bili-open {
+  font: inherit; margin-top: 12px; font-size: 13px; color: var(--fg);
+  background: rgba(255, 255, 255, .16); border: 0; border-radius: 999px;
+  padding: 8px 16px; cursor: pointer; transition: background .15s;
+}
+.bili-open:hover { background: rgba(255, 255, 255, .24); }
+body.theme-light .bili-row:hover { background: rgba(0, 0, 0, .05); }
+body.theme-light .bili-pane::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .18); }
+
+
+/* ==== glass families =====================================================
+ * three textures, assigned per card at render time:
+ *   liquid  - high gloss, hairline rim, nearly clear
+ *   fluted  - vertical reeded lines (the 长虹 pattern)
+ *   frosted - plain blur, no texture
+ * thickness comes from the inset ring, jelly from the spring transition. */
+
+#pages .widget:not(.widget-plain) {
+  /* thickness is painted two ways so it reads everywhere: a pure-gradient
+     sheen (top highlight + bottom edge + side glints) that needs no GPU,
+     plus the inset/drop box-shadow ring below for real depth on GPU. */
+  background:
+    linear-gradient(180deg,
+      var(--gl-sheen-top) 0%,
+      var(--gl-sheen-side) 13%,
+      rgba(255,255,255,0.00) 30%,
+      rgba(255,255,255,0.00) 80%,
+      var(--gl-shade) 100%),
+    linear-gradient(90deg,
+      var(--gl-sheen-side) 0%,
+      rgba(255,255,255,0.00) 9%,
+      rgba(255,255,255,0.00) 91%,
+      var(--gl-sheen-side) 100%),
+    var(--glass-tint-dark) !important;   /* derived from the system palette */
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%) var(--gl-bright) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%) var(--gl-bright) !important;
+  border: 1px solid var(--gl-edge) !important;
+  box-shadow:
+    0 8px 18px rgba(18, 28, 30, 0.16),
+    0 3px 8px rgba(18, 28, 30, 0.10),
+    inset 0 1px 0 var(--gl-rim-top),
+    inset 0 -2px 3px var(--glass-edge-soft),
+    inset 2px 0 3px var(--gl-rim-side),
+    inset -2px 0 3px var(--gl-rim-side) !important;
+  transition: left .18s cubic-bezier(.34,1.56,.64,1),
+              top .18s cubic-bezier(.34,1.56,.64,1),
+              width .18s cubic-bezier(.34,1.56,.64,1),
+              height .18s cubic-bezier(.34,1.56,.64,1),
+              transform .22s cubic-bezier(.34,1.8,.5,1),
+              box-shadow .3s ease !important;
+}
+
+/* liquid: almost fully clear. The generic .widget rule paints a tinted plate
+   plus a wide drop shadow; both are replaced here so only the rim remains. */
+#pages .widget.glass-liquid {
+  background:
+    linear-gradient(150deg, var(--gl-liquid-sheen) 0%, rgba(255,255,255,0) 32%),
+    var(--gl-liquid-fill) !important;
+  -webkit-backdrop-filter: blur(var(--blur-liquid)) saturate(116%) var(--gl-bright) !important;
+  backdrop-filter: blur(var(--blur-liquid)) saturate(116%) var(--gl-bright) !important;
+  border-color: var(--gl-liquid-rim) !important;
+  box-shadow:
+    0 2px 10px rgba(12, 24, 28, .06),
+    inset 0 1px 0 var(--gl-rim-top),
+    inset 0 -1px 2px var(--glass-edge-soft),
+    inset 2px 0 2px var(--gl-rim-side),
+    inset -2px 0 2px var(--gl-rim-side) !important;
+}
+
+/* liquid: hairline rim + top sheen */
+#pages .widget.glass-liquid::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(150deg, var(--gl-liquid-sheen) 0%, rgba(255,255,255,0) 26%),
+    radial-gradient(120% 70% at 15% 0%, var(--gl-liquid-sheen), transparent 52%);
+  mix-blend-mode: var(--gl-blend);
+}
+
+/* fluted (长虹玻璃): a row of vertical reeds — each rib is a half-cylinder
+   that catches a bright crest and casts a groove shadow, plus a soft
+   top-to-bottom cylindrical bow. Two blended layers give real depth. */
+#pages .widget.glass-fluted {
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * .9)) saturate(130%) var(--gl-bright) !important;
+  backdrop-filter: blur(calc(var(--glass-blur) * .9)) saturate(130%) var(--gl-bright) !important;
+}
+#pages .widget.glass-fluted::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,0.00) 0px,
+    var(--gl-reef) 2px,            /* soft convex crest */
+    rgba(255,255,255,0.04) 5px,
+    rgba(0,0,0,0.20)        9px,    /* groove shadow */
+    rgba(255,255,255,0.00) 14px
+  );
+  background-size: 14px 100%;
+  mix-blend-mode: var(--gl-reef-blend);
+  filter: blur(0.5px);
+  opacity: .9;
+}
+#pages .widget.glass-fluted::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      var(--gl-reef-bow) 0%,
+      rgba(255,255,255,0.00) 38%,
+      rgba(0,0,0,0.12) 100%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.11) 7px,         /* reinforce groove at the rib midpoint */
+      rgba(0,0,0,0.00) 14px
+    );
+  mix-blend-mode: multiply;
+  opacity: .5;
+}
+
+/* frosted: keep the blur, drop the extras */
+#pages .widget.glass-frosted {
+  background:
+    repeating-linear-gradient(0deg, var(--gl-frost-grain) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, var(--gl-frost-grain-dark) 0 1px, transparent 1px 3px),
+    var(--gl-frost-fill) !important;
+  -webkit-backdrop-filter: blur(var(--blur-frosted)) saturate(85%) contrast(.94) var(--gl-bright) !important;
+  backdrop-filter: blur(var(--blur-frosted)) saturate(85%) contrast(.94) var(--gl-bright) !important;
+}
+#pages .widget.glass-frosted::before { display: none !important; }
+
+/* Clearer glass means text sits closer to the wallpaper. Keep the glyphs
+   legible with a soft halo that follows wallpaper brightness (same rule the
+   content-only cards already use). Font size / weight are untouched. */
+#pages .widget:not(.widget-plain) .widget-head,
+#pages .widget:not(.widget-plain) .widget-body {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, .85);
+}
+body.on-dark #pages .widget:not(.widget-plain) .widget-head,
+body.on-dark #pages .widget:not(.widget-plain) .widget-body {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .70);
+}
+
+/* jelly: the card leans into the drag, then springs back. The live transform
+   is written by JS; this rule only deepens the lift and raises the layer. */
+#pages .widget.is-dragging {
+  box-shadow: 0 30px 72px rgba(15, 55, 50, 0.32) !important;
+  z-index: 60 !important;
+  cursor: grabbing;
+}
+
+/* clock carries the weather line now */
+.pc-clock-wx {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  letter-spacing: .01em;
+}
+
+/* ---------- vinyl: square card, record fills it, text floats in front ---- */
+.music-widget { display: flex; flex-direction: column; padding: 0 !important; overflow: hidden; }
+.music-widget > .widget-head { position: absolute; top: 10px; left: 12px; z-index: 3; }
+
+.m-body, .music-body { position: absolute; inset: 0; }
+
+.m-deck {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 10px;
+}
+.m-disc {
+  position: relative;
+  width: min(72%, 218px); aspect-ratio: 1; border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.045) 0 1px, rgba(0,0,0,.34) 1px 3px),
+    #101116;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.18),
+    0 12px 30px rgba(0,0,0,.34);
+  animation: spin 9s linear infinite;
+  animation-play-state: paused;
+}
+.music-widget.is-playing .m-disc { animation-play-state: running; }
+
+/* album art sits on the record, shaded so the rim still reads as vinyl */
+.m-cover {
+  position: absolute; inset: 27%; border-radius: 50%;
+  background-size: cover; background-position: center;
+  background-color: rgba(255,255,255,.10);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.28), 0 0 18px rgba(0,0,0,.30);
+}
+.m-cover.has-art { background-color: transparent; }
+
+.m-hole {
+  position: absolute; inset: 46.5%; border-radius: 50%;
+  background: rgba(18,18,22,.92);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
+}
+.m-shine {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: linear-gradient(145deg, rgba(255,255,255,.22), transparent 46%);
+  mix-blend-mode: screen;
+}
+
+/* text sits over the lower third of the record, on a soft scrim */
+.m-float {
+  position: absolute; left: 0; right: 0; bottom: 54px; padding: 26px 16px 8px;
+  background: linear-gradient(180deg, rgba(10,10,14,0) 0%, rgba(10,10,14,.20) 50%, rgba(10,10,14,.40) 100%);
+  text-align: center; z-index: 2; pointer-events: none;
+}
+.m-title {
+  font-size: 14px; font-weight: 600; line-height: 1.32; letter-spacing: .01em;
+  color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.55);
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.m-artist {
+  margin-top: 3px; font-size: 11.5px; line-height: 1.3;
+  color: rgba(255,255,255,.88); text-shadow: 0 1px 5px rgba(0,0,0,.55);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.m-bar {
+  margin: 8px auto 0; width: 74%; height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,.30); overflow: hidden;
+}
+.m-bar i { display: block; height: 100%; width: 0; background: #fff; border-radius: 2px; }
+
+/* controls: bare glyphs, no chip, no border */
+.m-ctrls {
+  position: absolute; left: 0; right: 0; bottom: 12px; z-index: 3;
+  display: flex; justify-content: center; align-items: center; gap: 26px;
+}
+.m-ctrls button {
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  padding: 6px 4px !important; margin: 0 !important; min-width: 0 !important;
+  color: #fff; font-size: 15px; line-height: 1;
+  text-shadow: 0 1px 6px rgba(0,0,0,.5);
+  opacity: .82; transition: opacity .15s;
+}
+.m-ctrls button:hover { opacity: 1; }
+.m-ctrls .m-play { font-size: 17px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- folder ---------- */
+.folder-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 3px;
+  margin-top: 6px;
+  max-height: calc(100% - 26px);
+  /* The nine-thumbnail preview never needs a scrollbar. Keep wheel scrolling
+     available when expanded, but never draw a bar - on a small 1:1 card the
+     thin bar read as a stray line under the folder. */
+  overflow-y: auto;
+  scrollbar-width: none;
+  align-content: start;
+}
+.folder-grid::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.widget:not(.folder-expanded) .folder-grid { overflow: hidden; }
+.folder-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 3px 2px; border-radius: 8px; cursor: default;
+}
+.folder-item:hover { background: rgba(255,255,255,.16); }
+.folder-ico { width: 20px; height: 20px; display: grid; place-items: center; font-size: 13px; }
+.folder-ico img { width: 20px; height: 20px; object-fit: contain; }
+.folder-name {
+  font-size: 8.5px; line-height: 1.15; text-align: center; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-dim);
+}
+.folder-empty { font-size: 12px; color: var(--fg-dim); padding: 8px; }
+/* nine-thumbnail preview; clicking the folder grows the card downward */
+.folder-more {
+  grid-column: 1 / -1; text-align: center; font-size: 10px;
+  color: var(--fg-dim); padding: 5px 4px; border-radius: 8px;
+  cursor: pointer; opacity: .78;
+}
+.folder-more:hover { background: rgba(255, 255, 255, .14); opacity: 1; }
+.folder-expanded { z-index: 20; }
+.folder-expanded .folder-grid { max-height: calc(100% - 30px); }
+
+/* ---------- GridPack: re-roll control + 1:1 player ---------- */
+
+/* edit-mode action button: re-deal spans (Tetris mix) */
+.reroll-btn {
+  position: fixed; right: 22px; bottom: 26px; z-index: 60;
+  padding: 9px 18px; border: 1px solid rgba(255,255,255,.22);
+  border-radius: 999px; cursor: pointer;
+  font: 600 13px/1 var(--fonts); letter-spacing: .04em;
+  color: var(--fg);
+  background: rgba(20,20,26,.55);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.reroll-btn:hover { background: rgba(40,40,52,.68); }
+.reroll-btn:active { transform: scale(.96); }
+.reroll-btn[hidden] { display: none; }
+
+/* a re-roll pops the freshly packed widgets instead of snapping them */
+body.rerolling #pages .widget { animation: widget-pop .34s var(--ease, ease) both; }
+@keyframes widget-pop {
+  from { transform: scale(.9); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
+/* 1:1 player guard: .m-disc is already aspect-ratio:1 in the base rules; this
+   keeps it centred and uncropped if a music card ever lands in a wide cell */
+#pages .music-widget .m-deck { display: grid; place-items: center; }
+
+/* ---------------- performance: skip backdrop-filter -------------------------
+   The shell is a TRANSPARENT window. Chromium's backdrop-filter can only
+   sample what this page itself paints; it never sees the live Wallpaper
+   Engine desktop underneath (see the note at the top of this file). So the
+   blur radius contributes almost nothing visually -- the frosted look comes
+   from the painted --gl-frost-fill layer -- but every one of the ~26 active
+   filters forces its own render surface + gaussian pass on every composite.
+
+   Real Electron A/B on 1692x956 (pico_perf_ab_report_20261108.txt):
+     disabling every backdrop-filter changed 0.00% of 3,651,417 pixels,
+     mean channel delta 0.001 / 255. Visually identical, 26 fewer passes.
+
+   Default off. Add body.glass-on (cards.json "glassOn": true) to restore the
+   old look at the old GPU cost. Scope is deliberately narrow: only filter
+   declarations are touched, no colour, radius, shadow or fill changes. */
+body:not(.glass-on) *,
+body:not(.glass-on) *::before,
+body:not(.glass-on) *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+/* The per-widget glass rules use #pages .widget:not(.widget-plain) with
+   !important -- specificity (1,2,0) beats the generic rule above (0,1,1).
+   Those are exactly the 11 card surfaces, i.e. the expensive ones. Repeat
+   the override with (1,2,1) so it actually wins. Keep the generic rule too:
+   it covers dock, drawer, sheets and every lower-specificity surface. */
+body:not(.glass-on) #pages .widget,
+body:not(.glass-on) #pages .widget::before,
+body:not(.glass-on) #pages .widget::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Native desktop mode: the shell window is hidden, so no animation should
+   keep a compositor layer alive behind Explorer. Pause, never remove --
+   taking the class off resumes every animation exactly where it was.
+   No colour, glass, size or layout change, so the design is untouched. */
+body.shell-asleep *,
+body.shell-asleep *::before,
+body.shell-asleep *::after {
+  animation-play-state: paused !important;
+}

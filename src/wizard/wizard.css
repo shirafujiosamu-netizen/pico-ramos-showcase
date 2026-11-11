@@ -1,0 +1,137 @@
+/* Pico RamOS wizard styles: dark floating panel, no window shadow (the
+   frameless transparent window crops box-shadows into corner artifacts). */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: transparent;
+  font: 13px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: #ece9e3;
+  user-select: none; -webkit-user-select: none;
+}
+#wiz {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: rgba(18, 18, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+.whead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; cursor: move; flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.045);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px 14px 0 0;
+}
+.wtitle { font-size: 12.5px; font-weight: 700; letter-spacing: .04em; }
+.wstep { font-size: 11px; color: #9b978e; font-variant-numeric: tabular-nums; }
+.wpane { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px; }
+.wpane.hidden { display: none; }
+.wpane::-webkit-scrollbar { width: 5px; }
+.wpane::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 3px; }
+.wintro { font-size: 11.5px; color: #9b978e; line-height: 1.7; margin-bottom: 14px; }
+.wrow { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 12px; flex-wrap: wrap; }
+.wlab { flex: 0 0 76px; color: #9b978e; font-size: 11.5px; }
+.wrow input[type="range"] { flex: 1; accent-color: #f47b5c; height: 18px; min-width: 120px; }
+.wval { flex: 0 0 40px; text-align: right; color: #d8d4cc; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.wrow label { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #d8d4cc; }
+.wrow input[type="checkbox"], .wp-check input { accent-color: #f47b5c; }
+.wsw { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.wsw-b {
+  width: 20px; height: 20px; border-radius: 6px; cursor: pointer; padding: 0;
+  border: 1px solid rgba(255,255,255,.18);
+}
+#wColor { width: 28px; height: 22px; border: none; background: none; padding: 0; cursor: pointer; }
+
+.wlist { display: flex; flex-direction: column; gap: 6px; }
+.wp-item {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 9px 10px; border-radius: 10px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+}
+.wp-check { padding-top: 2px; }
+.wp-body { flex: 1; min-width: 0; }
+.wp-name { font-size: 12.5px; font-weight: 600; }
+.wp-sub { font-size: 10px; color: #6f6b63; margin: 1px 0 4px; }
+.wp-path { display: flex; gap: 5px; }
+.wp-input {
+  flex: 1; min-width: 0; background: rgba(255,255,255,.06); color: #d8d4cc;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 7px;
+  font: 10.5px/1 "Microsoft YaHei", sans-serif; padding: 5px 7px;
+}
+.wp-input:focus { outline: none; border-color: rgba(244,123,92,.5); }
+.wp-browse {
+  appearance: none; border: 1px solid rgba(255,255,255,.12); border-radius: 7px;
+  background: rgba(255,255,255,.05); color: #b8b4ab;
+  font: 600 10px/1 "Microsoft YaHei", sans-serif; padding: 5px 9px; cursor: pointer; flex: 0 0 auto;
+}
+.wp-browse:hover { color: #fff; background: rgba(255,255,255,.1); }
+.wadd {
+  width: 100%; margin-top: 10px; appearance: none;
+  border: 1px dashed rgba(244,123,92,.45); border-radius: 10px;
+  background: rgba(244,123,92,.08); color: #ffb9a6;
+  font: 600 11.5px/1 "Microsoft YaHei", sans-serif; padding: 10px; cursor: pointer;
+}
+.wadd:hover { background: rgba(244,123,92,.18); color: #fff; }
+
+.wfoot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-top: 1px solid rgba(255,255,255,.07);
+}
+.whint { flex: 1; font-size: 10.5px; color: #6f6b63; text-align: center; }
+.wbtn {
+  appearance: none; border: 1px solid rgba(255,255,255,.14); border-radius: 9px;
+  background: rgba(255,255,255,.05); color: #d8d4cc;
+  font: 600 12px/1 "Microsoft YaHei", sans-serif; padding: 9px 18px; cursor: pointer;
+}
+.wbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
+.wbtn.primary { background: rgba(244,123,92,.2); border-color: rgba(244,123,92,.45); color: #ffb9a6; }
+.wbtn.primary:hover { background: rgba(244,123,92,.35); color: #fff; }
+.wbtn.ghost { border-color: transparent; background: none; color: #6f6b63; }
+.wbtn.small { padding: 7px 14px; font-size: 11px; }
+
+/* login consent */
+.wconsent {
+  background: rgba(244,123,92,.08); border: 1px solid rgba(244,123,92,.3);
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 14px;
+}
+.wconsent label { display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px; color: #ffd9cc; line-height: 1.6; cursor: pointer; }
+.wconsent input { margin-top: 2px; accent-color: #f47b5c; flex: 0 0 auto; }
+.wconsent code { font: 11px/1.4 ui-monospace, monospace; background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 4px; }
+
+/* agent API key */
+.wagent { margin-top: 14px; }
+#wAgent {
+  flex: 1; min-width: 0; background: rgba(255,255,255,.06); color: #d8d4cc;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 7px;
+  font: 10.5px/1 "Microsoft YaHei", sans-serif; padding: 5px 7px;
+}
+#wAgent:focus { outline: none; border-color: rgba(244,123,92,.5); }
+
+/* mail accounts */
+.wmail { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 11px; padding: 11px; margin-bottom: 6px; }
+.wm-form { display: flex; gap: 6px; flex-wrap: wrap; }
+.wm-form select, .wm-form input {
+  background: rgba(255,255,255,.06); color: #d8d4cc; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px; font: 11px/1 "Microsoft YaHei", sans-serif; padding: 7px 8px; min-width: 0;
+}
+.wm-form select { flex: 0 0 auto; }
+.wm-form input#wmUser { flex: 1; }
+.wm-form input#wmPass { flex: 1; }
+.wm-custom { display: flex; gap: 6px; align-items: center; margin-top: 7px; flex-wrap: wrap; }
+.wm-custom input#wmHost { flex: 1; min-width: 120px; }
+.wm-secure { font-size: 11px; color: #d8d4cc; display: inline-flex; gap: 4px; align-items: center; }
+.wm-addrow { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.wm-tip { flex: 1; font-size: 9.5px; color: #6f6b63; line-height: 1.5; }
+.wmlist { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.wmitem {
+  display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 9px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); font-size: 11px;
+}
+.wmitem .wm-up, .wmitem .wm-down, .wmitem .wm-del {
+  cursor: pointer; color: #6f6b63; flex: 0 0 auto; width: 18px; text-align: center;
+}
+.wmitem .wm-up:hover, .wmitem .wm-down:hover { color: #ffb9a6; }
+.wmitem .wm-del:hover { color: #e89a8c; background: rgba(224,108,91,.15); border-radius: 5px; }
+.wmitem .wm-name { flex: 0 0 auto; color: #ffb9a6; font-weight: 600; }
+.wmitem .wm-u { flex: 1; min-width: 0; color: #c8c4bc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wm-empty { color: #6f6b63; font-size: 11px; text-align: center; padding: 6px 0; }

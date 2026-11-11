@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Pico RamOS</title>
+<link rel="stylesheet" href="os.css">
+</head>
+<body>
+<div id="os">
+  <div id="wallpaper"></div>
+
+  <!-- 歌词层：最底层、无容器，只吃不到鼠标 -->
+  <aside id="lyric" class="right" aria-hidden="true">
+    <div class="lly-meta" id="lyricMeta"></div>
+    <div class="lly-lines" id="lyricLines"></div>
+    <div class="lly-bar"><i id="lyricBar"></i></div>
+  </aside>
+
+  <div id="statusbar">
+    <span class="scene" id="sceneName"></span>
+    <span class="clock" id="clock"></span>
+  </div>
+
+  <div id="pages"></div>
+  <div id="dots"></div>
+
+  <!-- glass taskbar: one independent glass block per item, no strip behind them -->
+  <div id="dock" aria-label="玻璃任务栏"></div>
+
+  <section class="sheet" id="drawer" hidden>
+    <div class="sheet-head">
+      <span>全部应用</span>
+      <button class="sheet-close" data-close="drawer">×</button>
+    </div>
+    <div class="sheet-body">
+      <input id="drawer-search" placeholder="搜索应用">
+      <div id="drawer-grid"></div>
+    </div>
+  </section>
+
+  <section class="sheet" id="sheet" hidden>
+    <div class="sheet-head">
+      <span id="sheetTitle"></span>
+      <button class="sheet-close" data-close="sheet">×</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </section>
+
+  <div class="grid-hint" id="gridHint" hidden></div>
+  <button class="reroll-btn" id="rerollBtn" type="button" hidden>重排</button>
+</div>
+<script src="layout.js"></script>
+<script src="cards-extra.js"></script>
+<script src="os.js"></script>
+</body>
+</html>

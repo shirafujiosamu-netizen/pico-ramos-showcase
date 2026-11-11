@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>消息卡</title>
+<link rel="stylesheet" href="../shell/card.css">
+<style>
+  .mbar { display: flex; align-items: center; gap: 6px; padding: 6px 8px 0; flex: 0 0 auto; }
+  .mbar .mtitle { flex: 1; min-width: 0; font-size: 0.962rem; font-weight: 700; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mbar button {
+    appearance: none; border: 1px solid var(--surf-hi); border-radius: 7px;
+    background: var(--surf); color: var(--ink-3); font-size: 0.808rem; padding: 4px 9px; cursor: pointer; flex: 0 0 auto;
+  }
+  .mbar button:hover { background: var(--surf-hi); color: #fff; }
+  .mpane { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px 12px; }
+  .mpane::-webkit-scrollbar { width: 5px; }
+  .mpane::-webkit-scrollbar-thumb { background: var(--surf-max); border-radius: 3px; }
+  .macc { margin-bottom: 11px; }
+  .macc-h { display: flex; align-items: center; gap: 6px; font-size: 0.808rem; color: #f47b5c; margin-bottom: 5px; }
+  .macc-h .adot { width: 7px; height: 7px; border-radius: 50%; background: #9ece6a; }
+  .macc-h .adot.err { background: #e06c5b; }
+  .macc-h .an { font-weight: 700; }
+  .macc-h .aerr { color: #e06c5b; font-size: 0.731rem; white-space: normal; line-height: 1.5; }
+  .mitem { padding: 7px 9px; margin-bottom: 5px; border-radius: 9px;
+    background: var(--surf); border: 1px solid var(--surf-hi); cursor: pointer; }
+  .mitem:hover { background: var(--surf-hi); }
+  /* unread: warm tint + dot before the sender, subject in semibold */
+  .mitem.unread { background: rgba(244,123,92,.07); border-color: rgba(244,123,92,.22); }
+  .mitem.unread .mf { color: var(--accent-ink); }
+  .mitem.unread .mf::before { content: ''; display: inline-block; width: 5px; height: 5px;
+    border-radius: 50%; background: #f47b5c; margin-right: 5px; vertical-align: 1px; }
+  .mitem.unread .ms { color: var(--ink); font-weight: 600; }
+  .mitem .mf { font-size: 0.846rem; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mitem .ms { font-size: 0.846rem; color: var(--ink-2); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .mitem .md { font-size: 0.692rem; color: var(--ink-4); margin-top: 2px; }
+  .mitem .mp { font-size: 0.731rem; color: var(--ink-3); line-height: 1.5; margin-top: 3px; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .empty { color: var(--ink-4); font-size: 0.846rem; text-align: center; padding: 22px 10px; line-height: 1.8; }
+  .munread { flex: 0 0 auto; font-size: 0.731rem; font-weight: 700; color: #fff;
+    background: #e06c5b; border-radius: 8px; padding: 1px 7px; }
+  .munread.hidden { display: none; }
+  .mhint { font-size: 0.731rem; color: var(--ink-4); text-align: center; padding: 2px 8px 10px; line-height: 1.6; }
+</style>
+</head>
+<body class="theme-light">
+<div id="card">
+  <div id="chrome-slot"></div>
+  <div class="mbar">
+    <span class="mtitle">消息 · 邮件聚合</span>
+    <span class="munread hidden" id="mUnread"></span>
+    <button id="mRefresh" title="刷新收件箱">↻ 刷新</button>
+  </div>
+  <div class="mpane" id="mPane"></div>
+  <div id="rslot"></div>
+</div>
+<script src="../shell/card.js"></script>
+<script src="mail.js"></script>
+</body>
+</html>

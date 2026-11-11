@@ -1,0 +1,356 @@
+/* Pico RamOS card shell styles: dark floating card, shared by all card kinds.
+   Theme tokens: :root holds the dark default (the original look), and
+   body.theme-light re-skins surfaces/ink for the warm-paper light tone used
+   when "follow system color" is on and Windows is in light mode. Brand coral
+   (#f47b5c) and status colors are identical in both themes. */
+:root {
+  --ink: #ece9e3;               /* primary text */
+  --ink-2: #d8d4cc;             /* values / input text */
+  --ink-3: #b5b0a5;             /* secondary text, buttons */
+  --ink-4: #8d8880;             /* muted hints */
+  --hair: var(--surf-hi);       /* card border */
+  --surf: rgba(255, 255, 255, 0.05);      /* resting surface */
+  --surf-hi: rgba(255, 255, 255, 0.11);   /* hover / border surface */
+  --surf-max: rgba(255, 255, 255, 0.2);   /* scrollbars, swatch rings */
+  --grip-dot: rgba(255, 255, 255, 0.6);   /* drag grip dots */
+  --panel: rgba(20, 20, 26, 0.97);        /* settings popover */
+  --panel-solid: #1a1a20;                 /* <option> background */
+  --chip: rgba(20, 20, 26, 0.55);         /* chrome button chip */
+  --toast-bg: rgba(10, 10, 14, 0.85);     /* first-run hint pill */
+  --toast-ink: #e8e4dc;
+  --accent-ink: #ffb9a6;                  /* coral text on dark */
+  --accent: #f47b5c;                      /* OS accent when following (JS overrides) */
+  /* frosted-glass surface: the TRJ-portfolio language - a blurred, bright-
+     edged pane over the desktop, tinted by the card color. backdrop-filter
+     samples whatever is behind the window (wallpaper / other windows). */
+  --glass-tint: rgba(16, 16, 22, 0.46);
+  --glass-tint-2: rgba(26, 26, 34, 0.34);
+  --glass-edge: rgba(255, 255, 255, 0.24);
+}
+body.theme-light {
+  --ink: #2b2925;
+  --ink-2: #3a3733;
+  --ink-3: #5c584f;
+  --ink-4: #837d72;
+  --surf: rgba(0, 0, 0, 0.04);
+  --surf-hi: rgba(0, 0, 0, 0.1);
+  --surf-max: rgba(0, 0, 0, 0.18);
+  --grip-dot: rgba(0, 0, 0, 0.45);
+  --panel: rgba(250, 248, 243, 0.97);
+  --panel-solid: #f4f1ea;
+  --chip: rgba(255, 255, 255, 0.78);
+  --toast-bg: rgba(43, 41, 37, 0.88);
+  --toast-ink: #f4f1ea;
+  --accent-ink: #c25a3e;                  /* darker coral reads on paper */
+  --glass-tint: rgba(255, 255, 255, 0.72);
+  --glass-tint-2: rgba(255, 255, 255, 0.4);
+  --glass-edge: rgba(43, 41, 37, 0.16);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: transparent;
+  font: 1rem/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: var(--ink);
+  user-select: none; -webkit-user-select: none;
+}
+/* ---------- frosted glass card (TRJ look) ----------
+   The card is a real glass pane: backdrop blur + a bright diagonal sheen +
+   a 1.5px luminous edge + an OS-accent hairline along the top (the visible
+   proof of "follow the system theme color"). transform carries the pointer
+   3D tilt (set from card.js); it is cleared while a window drag runs. */
+#card {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background:
+    linear-gradient(155deg, var(--glass-tint), var(--glass-tint-2) 46%, var(--glass-tint)),
+    var(--card-color, rgba(14, 14, 19, 0.90));
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  border: 1.5px solid var(--glass-edge);
+  border-radius: 20px;                 /* TRJ-portfolio roundness */
+  overflow: hidden;
+  transform: perspective(900px) rotateX(0deg) rotateY(0deg);
+  transition: transform .45s cubic-bezier(.22,1,.36,1), opacity .3s cubic-bezier(.22,1,.36,1),
+    border-color .25s ease, filter .25s ease;
+  will-change: transform;
+}
+/* accent hairline: every card wears the live Windows accent along its top */
+#card::before {
+  content: ''; position: absolute; top: 0; left: 16px; right: 16px; height: 2px;
+  border-radius: 2px; z-index: 30; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .9;
+}
+/* focus: the anchored card reads biggest AND wears the full accent ring;
+   side cards sit back as context. Pets never dim - a cut-out character
+   fading out reads as a bug, not a style. */
+/* context cards dim only slightly: at .72 the wallpaper read straight through
+   the pane and the text became unreadable ("字还是看不清"). */
+body:not(.is-focus) #card { opacity: 1; }
+#card.is-focus {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent), inset 0 12px 28px -18px var(--accent);
+}
+#card.is-focus::before { opacity: 1; height: 2.5px; }
+/* hover = the card LIGHTS UP (accent edge + brightness) - the "hovering the
+   IELTS card does nothing" report. Applies to focus and context cards alike. */
+#card:hover { border-color: var(--accent); filter: brightness(1.07); }
+body:not(.is-focus) #card:hover { opacity: 1; }
+body.pet:not(.is-focus) #card { opacity: 1; }
+body.pet #card:hover { filter: none; }
+body.dragging #card { transition: none; transform: none !important; }
+
+/* ---------- chrome overlay: NO title bar (mobile-widget look) ----------
+   There is deliberately no header bar and no title text. The chrome is a
+   transparent overlay; only the small drag grip (top-left) and the ⚙ / ✕
+   buttons (top-right) catch the mouse - everything else passes clicks
+   through to the card content. Both fade in only while hovering the card.
+   The chrome sits ABOVE the resize zones (z 45) so the grip never loses a
+   pointerdown to the corner handle - grabbing the grip must MOVE the card,
+   never resize it (the "edges expand while I drag" report). */
+.chrome {
+  position: absolute; top: 0; left: 0; right: 0; height: 30px; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 7px; pointer-events: none;
+}
+.grip {
+  display: flex; align-items: center; pointer-events: auto;
+  cursor: move; padding: 3px; border-radius: 7px;
+}
+.gdots {
+  width: 14px; height: 14px; border-radius: 4px; opacity: 0;
+  transition: opacity .16s;
+  background:
+    radial-gradient(circle at 3px 3px, var(--grip-dot) 1.2px, transparent 1.3px),
+    radial-gradient(circle at 8px 3px, var(--grip-dot) 1.2px, transparent 1.3px),
+    radial-gradient(circle at 3px 8px, var(--grip-dot) 1.2px, transparent 1.3px),
+    radial-gradient(circle at 8px 8px, var(--grip-dot) 1.2px, transparent 1.3px);
+}
+#card:hover .gdots { opacity: .5; }
+.ctitle { display: none; }
+.cacts { display: flex; gap: 3px; pointer-events: auto; opacity: 0; transition: opacity .16s; }
+#card:hover .cacts { opacity: 1; }
+.cbtn {
+  appearance: none; border: none; color: var(--ink-3); background: var(--chip);
+  width: 22px; height: 20px; border-radius: 6px; cursor: pointer; font-size: 0.923rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cbtn:hover { background: var(--surf-max); color: #fff; }
+.cbtn.danger:hover { background: rgba(224, 108, 91, 0.5); color: #fff; }
+
+/* ---------- scrollbars (thin, themed, never a fat gray slab) ----------
+   Small cards with real content used to grow a fat default scrollbar; every
+   scrollable pane inside a card now gets the same 6px accent-tinted rail. */
+* { scrollbar-width: thin; scrollbar-color: var(--surf-max) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 30%, var(--surf-max));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 55%, var(--surf-max)); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------- settings popover ---------- */
+/* no box-shadow anywhere: a transparent window crops shadows into visible
+   rings/strips along the window edges (user-reported on the pet card) */
+.csettings {
+  position: absolute; top: 34px; right: 8px; z-index: 60; width: 232px;
+  max-width: calc(100% - 16px);
+  /* #card is overflow:hidden, so on small cards (e.g. a 260x150 app card) a
+     fixed-height panel gets clipped and its lower controls become unreachable.
+     Cap the height and scroll inside the panel instead. */
+  max-height: calc(100% - 44px); overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--surf-hi); border-radius: 10px;
+  padding: 10px 12px;
+}
+.csettings.hidden { display: none; }
+.csettings::-webkit-scrollbar { width: 4px; }
+.csettings::-webkit-scrollbar-thumb { background: var(--surf-max); border-radius: 2px; }
+.crow { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 0.885rem; }
+.crow .clab { flex: 0 0 44px; color: var(--ink-3); }
+.crow input[type="range"] { flex: 1; accent-color: #f47b5c; height: 18px; }
+.cval { flex: 0 0 38px; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.swatches { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.sw {
+  width: 18px; height: 18px; border-radius: 5px; cursor: pointer;
+  border: 1px solid var(--surf-max); padding: 0;
+}
+.sw.on { outline: 2px solid #f47b5c; outline-offset: 1px; }
+#cColor { width: 26px; height: 20px; border: none; background: none; padding: 0; cursor: pointer; }
+.crow.muted { color: var(--ink-4); font-size: 0.808rem; line-height: 1.5; }
+.crow select, .crow input[type="text"] {
+  flex: 1; min-width: 0; background: var(--surf); color: var(--ink-2);
+  border: 1px solid var(--surf-hi); border-radius: 7px;
+  font: 0.885rem/1 "Microsoft YaHei", sans-serif; padding: 5px 7px;
+}
+.crow select option { background: var(--panel-solid); color: var(--ink-2); }
+.phead { font-weight: 700; color: var(--accent-ink); border-top: 1px solid var(--surf-hi); padding-top: 8px; }
+.pbtn {
+  flex: 1; appearance: none; border: 1px solid rgba(244,123,92,.4); border-radius: 8px;
+  background: rgba(244,123,92,.14); color: var(--accent-ink);
+  font: 600 0.846rem/1 "Microsoft YaHei", sans-serif; padding: 7px 8px; cursor: pointer;
+}
+.pbtn:hover { background: rgba(244,123,92,.28); color: #fff; }
+.pbtn.ghost2 { border-color: var(--surf-hi); background: none; color: var(--ink-3); font-weight: 500; }
+.pbtn.ghost2:hover { color: #fff; background: var(--surf-hi); }
+
+/* ---------- 8-way resize zones ----------
+   A transparent overlay carries eight hit zones (four edges + four corners).
+   Each zone anchors the edge OPPOSITE the drag and computes absolute bounds
+   in card.js (card-resize-to), so a diagonal drag resizes exactly in the
+   drag direction. The old single bottom-right handle sent relative deltas,
+   which made the window grow in random directions on diagonal drags. */
+.crzones { position: absolute; inset: 0; z-index: 45; pointer-events: none; }
+.crz { position: absolute; pointer-events: auto; }
+.crz::after {
+  content: ''; position: absolute; inset: 0;
+  background: var(--surf-max); border-radius: 2px;
+  opacity: 0; transition: opacity .15s;
+}
+.crz:hover::after { opacity: .55; }
+.crz-n { top: 0; left: 10px; right: 10px; height: 4px; cursor: ns-resize; }
+.crz-s { bottom: 0; left: 10px; right: 10px; height: 4px; cursor: ns-resize; }
+.crz-w { top: 10px; bottom: 10px; left: 0; width: 4px; cursor: ew-resize; }
+.crz-e { top: 10px; bottom: 10px; right: 0; width: 4px; cursor: ew-resize; }
+.crz-nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.crz-ne { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.crz-sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.crz-se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+
+/* ---------- first-run hint (one-time, auto-dismiss) ---------- */
+.chint {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: 70; max-width: calc(100% - 16px);
+  background: var(--toast-bg); color: var(--toast-ink);
+  border: 1px solid var(--surf-hi); border-radius: 9px;
+  font-size: 0.808rem; line-height: 1.5; padding: 6px 12px;
+  text-align: center; white-space: normal;
+  opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+.chint.on { opacity: 1; }
+.chint.out { opacity: 0; }
+
+/* ---------- app card body ---------- */
+.body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.appbox {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 18px 16px; text-align: center;
+}
+.appicon {
+  width: 46px; height: 46px; border-radius: 13px;
+  background: rgba(244, 123, 92, 0.16); border: 1px solid rgba(244, 123, 92, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.462rem; color: #f47b5c;
+}
+.appname { font-size: 1.077rem; font-weight: 700; }
+.appstatus { font-size: 0.846rem; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
+.appstatus .dot { width: 7px; height: 7px; border-radius: 50%; background: #6b6b6b; }
+.appstatus.running .dot { background: #9ece6a; box-shadow: 0 0 6px rgba(158, 206, 106, 0.7); }
+.launch {
+  appearance: none; border: 1px solid rgba(244, 123, 92, 0.45); border-radius: 9px;
+  background: rgba(244, 123, 92, 0.16); color: var(--accent-ink);
+  font: 600 0.923rem/1 "Microsoft YaHei", sans-serif; padding: 9px 26px; cursor: pointer;
+}
+.launch:hover { background: rgba(244, 123, 92, 0.3); color: #fff; }
+.launch:disabled { opacity: .45; cursor: default; }
+.ghost {
+  appearance: none; border: none; background: none; color: var(--ink-4);
+  font-size: 0.808rem; cursor: pointer; text-decoration: underline; padding: 2px;
+}
+.ghost:hover { color: var(--ink-3); }
+.apperr { font-size: 0.808rem; color: #e06c5b; max-width: 220px; line-height: 1.5; }
+
+/* ---------- web card body ---------- */
+.body.web { padding: 0; }
+#wv { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
+.webfallback {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: var(--card-color, #16161c); color: var(--ink-3); font-size: 0.923rem; text-align: center; padding: 20px;
+}
+.webfallback.hidden { display: none; }
+.webfallback .fbacts { display: flex; gap: 8px; margin-top: 4px; }
+.webfallback .fbacts .ghost { border: 1px solid var(--surf-hi); padding: 8px 18px; }
+
+/* ---------- bili card body ---------- */
+.bbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
+  padding: 5px 6px; background: var(--surf);
+  border-bottom: 1px solid var(--surf-hi);
+}
+.bq {
+  appearance: none; border: 1px solid var(--surf-hi); border-radius: 7px;
+  background: var(--surf); color: var(--ink-3);
+  font: 600 0.769rem/1 "Microsoft YaHei", sans-serif; padding: 5px 8px;
+  cursor: pointer; flex: 0 0 auto; white-space: nowrap;
+}
+.bq:hover { background: rgba(251,114,153,.18); color: #ffc2d6; border-color: rgba(251,114,153,.4); }
+.burl {
+  flex: 1; min-width: 0; background: var(--surf); color: var(--ink-2);
+  border: 1px solid var(--surf-hi); border-radius: 7px;
+  font: 0.808rem/1 "Microsoft YaHei", sans-serif; padding: 6px 8px;
+}
+.burl:focus { outline: none; border-color: rgba(251,114,153,.5); }
+.bopen {
+  appearance: none; border: 1px solid var(--surf-hi); border-radius: 7px;
+  background: var(--surf); color: var(--ink-3);
+  font-size: 0.846rem; padding: 5px 8px; cursor: pointer; flex: 0 0 auto;
+}
+.bopen:hover { color: #fff; background: var(--surf-hi); }
+#bWv { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
+.bstart {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  /* the start panel is the video area: keep it dark in every theme so the
+     copy never lands light-on-light */
+  background: #101017; padding: 24px;
+}
+.bstart.hidden { display: none; }
+.bstart-box { text-align: center; max-width: 300px; }
+.bstart-t { font-size: 1.154rem; font-weight: 700; color: #ffb9a6; margin-bottom: 10px; }
+.bstart-s { font-size: 0.846rem; color: #b5b0a5; line-height: 1.9; }
+
+/* ---------- folder card body ---------- */
+.body.folder { padding: 10px; }
+.fgrid {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px; align-content: start;
+}
+.fgrid::-webkit-scrollbar { width: 5px; }
+.fgrid::-webkit-scrollbar-thumb { background: var(--surf-max); border-radius: 3px; }
+.ftile {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 5px; padding: 9px 4px 7px; border-radius: 10px; cursor: pointer;
+  border: 1px solid transparent;
+}
+.ftile:hover { background: var(--surf); border-color: var(--surf-hi); }
+.ftile:active { transform: scale(.96); }
+.fico {
+  width: 40px; height: 40px; border-radius: 11px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.231rem; font-weight: 800; color: rgba(255,255,255,.92);
+  border: 1px solid var(--surf-hi);
+}
+.ftile.fadd .fico {
+  background: none !important; border-style: dashed; border-color: var(--surf-max);
+  color: var(--ink-4); font-weight: 400;
+}
+.fname {
+  font-size: 0.731rem; color: var(--ink-3); text-align: center; width: 100%;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-all; line-height: 1.35;
+}
+.fdel, .fhandle {
+  position: absolute; top: 3px; width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.615rem; opacity: 0; transition: .12s; cursor: pointer;
+}
+.fdel { right: 3px; background: rgba(224,108,91,.85); color: #fff; }
+.fhandle { left: 3px; background: var(--surf-max); color: var(--ink-2); cursor: grab; }
+.ftile:hover .fdel, .ftile:hover .fhandle { opacity: 1; }
+.fdel:hover { background: rgba(224,108,91,1); }
+.fhandle:hover { background: var(--surf-max); color: #fff; }
+.body.folder.fdropping { outline: 2px dashed rgba(244,123,92,.6); outline-offset: -4px; }
